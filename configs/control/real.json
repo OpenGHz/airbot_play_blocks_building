@@ -1,0 +1,17 @@
+{
+    "PICK_JOINT" : "AUTO",
+    "PICK_POSITION_X" : 0.3,
+    "PICK_POSITION_Y" : 0.0020,
+    "PICK_POSITION_Z" : 0.000,
+    "PICK_ROLL" : 0,
+    "PICK_PITCH": 1.570796,
+    "PICK_YAW" : 0,
+    "PICK_GRASP_Z": -0.065,
+    "PLACE_POSITION_X" : 0.28,
+    "PLACE_POSITION_Y" : 0.2145,
+    "PLACE_POSITION_Z" : "PICK_GRASP_Z",
+    "PLACE_ROLL" : "PICK_ROLL",
+    "PLACE_PITCH" : "PICK_PITCH",
+    "PLACE_YAW" : "PICK_YAW",
+    "CUBE_HEIGHT" : 0.025
+}
