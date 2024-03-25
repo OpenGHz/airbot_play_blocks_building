@@ -1,0 +1,8 @@
+<launch>
+    <include file="$(find ros_interface)/launch/airbot_arm.launch" />
+    <include file="$(find airbot_play_launch)/airbot_play_moveit.launch">
+        <arg name="target_moveit_config" value="airbot_play_v3_gripper_gazebo_all_config" />
+        <arg name="use_basic" value="true" />
+        <arg name="use_rviz"  value="true" />
+    </include>
+</launch>
