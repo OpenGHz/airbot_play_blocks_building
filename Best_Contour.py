@@ -284,7 +284,8 @@ if __name__ == '__main__':
         com_print(ImageSize)
         rospy.spin()
     else:  # 实机
-        cap = StdVideo.Cap(int(device))
+        device = int(device)
+        cap = StdVideo.Cap(device)
         ImageSize = [int(StdVideo.Info(device, Types.CAP_FRAME_WIDTH)),
                      int(StdVideo.Info(device, Types.CAP_FRAME_HEIGHT))]
         com_print(ImageSize)
