@@ -11,6 +11,7 @@ from std_vision.video import StdVideo, Types
 from std_vision.contour import Contour
 from std_vision.draw import Draw
 from std_vision.ros_tools import RosTools
+from std_vision.geometry import Geometry
 
 
 if __name__ == '__main__':
@@ -26,6 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('-dfr','--default_ref',type=str, help='use default ref config: real or isaac',default='')
     parser.add_argument('-vd', '--video_device', type=str, help='video device', default="/camera/color/image_raw")
     parser.add_argument('-ci', '--camera_info', type=str, help='camera info topic', default="/camera/color/camera_info")
+    parser.add_argument('-rt', '--rotate_180', action='store_true', help='rotate 180 degree')
     args, unknown = parser.parse_known_args()
 
     # 参数配置
@@ -292,5 +294,8 @@ if __name__ == '__main__':
         expect_x = ImageSize[0]/2 if expect_x == 'AUTO' else expect_x
         while True:
             frame = StdVideo.Read(device)
+            # 将图像旋转180度
+            if args.rotate_180:
+                frame = Geometry.Rotation(frame, 180)
             image_process(frame)
             RosTools.ros_spin_once(0.001)
