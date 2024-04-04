@@ -38,8 +38,12 @@ while [ "$1" != "" ]; do
     shift
 done
 
-# detect whether the sim is ready
 if [ -z "$use_real" ] && [ -z "$sim_type" ];then
+	sim_type='-g'
+fi
+
+# detect whether the sim is ready
+if [ -z "$use_real" ] && [ "$sim_type" = "-gb" ];then
 	while [ "$(rosparam list | (grep /cube_delta_z))" == "" ]
 	do
 		echo "Wait for the sim to be really ready."
