@@ -880,14 +880,17 @@ if __name__ == "__main__":
     print(f'sim_type={sim_type}')
 
     # 选择夹爪类型
-    gripper_control = ChooseGripper(sim_type, gripper)()
+    gripper_sim_type = "gazebo_i" if sim_type == 'gazebo' else sim_type
+    gripper_control = ChooseGripper(gripper_sim_type, gripper)()
 
     # 根据不同夹爪类型初始化机器人体
-    gripper_type = {'gazebo':4,'isaac':4,None:0,'gibson':4,'gazebo_fx':4}  # 4表示自定义。0-3表示内置。
-    other_config = None if sim_type != 'gazebo' else ("", "airbot_play_arm")
+    gripper_type_0 = {None}
+    gripper_type = 4 if sim_type not in gripper_type_0 else 0  # 0表示没有夹爪，4表示有夹爪
+    # other_config = None if sim_type != 'gazebo' else ("", "airbot_play_arm")
+    other_config = None
     sim_type = 'gazebo_fx' if args.fixed else sim_type  # 最后修改gazebo的fix模式
     print('new_sim_type:',sim_type)
-    airbot_player = AIRbotPlayPickPlace(init_pose=None,node_name=NODE_NAME,gripper=(gripper_type[sim_type],gripper_control),other_config=other_config)
+    airbot_player = AIRbotPlayPickPlace(init_pose=None,node_name=NODE_NAME,gripper=(gripper_type, gripper_control),other_config=other_config)
 
     # 参数配置
     if args.use_real:
@@ -901,8 +904,9 @@ if __name__ == "__main__":
     airbot_player.load_configs(file_path)
 
     # 根据真机还是仿真初始化pick & place 任务
-    place_mode = {None:1,'isaac':0,'gazebo':1,'gibson':1,'gazebo_fx':1}  # 0表示在一侧pick另一侧place；1表示同侧pick&place
-    airbot_player.task_pick_place_param_init(place_mode[sim_type], sim_type=sim_type)
+    place_mode_0 = {'isaac'}  # 0表示在一侧pick另一侧place；1表示同侧pick&place
+    place_mode = 1 if sim_type not in place_mode_0 else 0
+    airbot_player.task_pick_place_param_init(place_mode, sim_type=sim_type)
     # 传入args.control_param参数，则进行参数配置阻塞以及自动夹取控制
     print('args.control_param=', control_param)
     if control_param >= 0: airbot_player.set_control_param(control_param)  # 自调参数（包括pick和place）
