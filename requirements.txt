@@ -1,0 +1,8 @@
+# create and activate airbot_play env by yourself
+# airbot_play create -n aloha python=3.8.10
+# airbot_play activate aloha
+
+opencv-python
+h5py
+scipy
+tqdm

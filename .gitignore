@@ -1,1 +1,4 @@
 demo/
+__pycache__/
+blocks_building_data/
+test.py
