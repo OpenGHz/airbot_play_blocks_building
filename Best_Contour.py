@@ -280,6 +280,7 @@ if __name__ == '__main__':
         else:
             expect_x = ImageSize[0]/2 if expect_x == 'AUTO' else expect_x
         """ 启动图片订阅 """
+        rospy.set_param("/best_contour_started", True)
         rospy.Subscriber(device, Image, image_process, queue_size=1)
         com_print(ImageSize)
         rospy.spin()

@@ -17,9 +17,9 @@ parser.add_argument("--image_shape", nargs=3, type=int, default=(480, 640, 3))
 parser.add_argument("--states_num", type=int, default=7)
 parser.add_argument("--name_space", default="/airbot_play")
 parser.add_argument("--frequency", type=int, default=25)
-parser.add_argument("--max_time_steps", type=int, default=25)
+parser.add_argument("-mts", "--max_time_steps", type=int, default=25)
 parser.add_argument("--output_dir", default="./IL/data/hdf5/blocks_building")
-parser.add_argument("--output_name", type=str, default="episode_0")
+parser.add_argument("-on", "--output_name", type=str, default="episode_0")
 args = parser.parse_args()
 
 """
@@ -122,9 +122,10 @@ current_body_state: JointState = rospy.wait_for_message(states_topic, JointState
 assert len(rospy.wait_for_message(arm_action_topic, JointState).name) == 6
 rospy.wait_for_message(gripper_action_topic, Float64).data
 
-print("Press Enter to start recording data...")
-input()
-
+print("Waiting for the best contour node started...")
+while not rospy.get_param("/best_contour_started", False):
+    rospy.sleep(0.1)
+print("Start recording...")
 # TODO: 分次（如每250步）保存数据，避免内存溢出
 rate = rospy.Rate(frequency)
 for step in tqdm(range(max_time_steps)):
@@ -138,6 +139,6 @@ for step in tqdm(range(max_time_steps)):
         current_action["gripper"]
     ]
     rate.sleep()
-
+print(f"Start saving data to {output_dir}/{output_name}...")
 save_one_episode(all_data, camera_names, output_dir, output_name, overwrite=True)
 print("Data saved.")
