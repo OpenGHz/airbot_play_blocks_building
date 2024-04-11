@@ -1,4 +1,3 @@
-
 import rospy
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import TransformStamped
@@ -21,7 +20,6 @@ if __name__ == '__main__':
     parser.add_argument('-ng','--negative',action='store_true',help='negative place')
     parser.add_argument('-ns','--not_show',action='store_true',help='show img or not')
     parser.add_argument('-t','--test',type=str, help='test mode: pi0 pi1 pl0 pl1',default='no')
-    # parser.add_argument('-hsv','--hsv_params',type=str, help='example: 1,2,3;4,5,6',default='')
     parser.add_argument('-cfg','--config_path',type=str, help='config file path',default='./configs/vision/gazebo.json')
     parser.add_argument('-dfv','--default_hsv',type=str, help='use default hsv config: real or isaac',default='')
     parser.add_argument('-dfr','--default_ref',type=str, help='use default ref config: real or isaac',default='')
@@ -148,8 +146,8 @@ if __name__ == '__main__':
             else:  # place模式
                 # place模式下mid_y没啥意义,然后‘长宽比’要大些
                 if args.use_real:
-                    # 裁切图像，避免由于物块大小不均匀造成的下层物块在上层轮廓侧边的漏出误识别（您也可以通过轮廓近似的方式来消除这种凸性缺陷）
-                    bi = StdVideo.create_empty_frame(ImageSize[:2],0)
+                    # 裁切图像，避免由于物块大小不均匀造成的下层物块在上层轮廓侧边的漏出误识别（也可以通过轮廓近似的方式来消除这种凸性缺陷）
+                    bi = StdVideo.create_empty_frame(ImageSize[:2], 0)
                     bi[:423,:] = binary_img[:423,:]
                     binary_img = bi
                 # 轮廓识别
@@ -275,14 +273,14 @@ if __name__ == '__main__':
     if not device.isdigit():
         """ 获取相机参数，主要是用到了宽和高来作为参考"""
         try:
-            camrera_info:CameraInfo = rospy.wait_for_message(args.camera_info,CameraInfo,timeout=2)
+            camrera_info:CameraInfo = rospy.wait_for_message(args.camera_info, CameraInfo, timeout=2)
             ImageSize = [camrera_info.width,camrera_info.height]
         except:
             raise Exception("获取相机参数信息失败")
         else:
             expect_x = ImageSize[0]/2 if expect_x == 'AUTO' else expect_x
         """ 启动图片订阅 """
-        rospy.Subscriber(device,Image,image_process,queue_size=1)
+        rospy.Subscriber(device, Image, image_process, queue_size=1)
         com_print(ImageSize)
         rospy.spin()
     else:  # 实机

@@ -18,7 +18,7 @@ parser.add_argument("--states_num", type=int, default=7)
 parser.add_argument("--name_space", default="/airbot_play")
 parser.add_argument("--frequency", type=int, default=25)
 parser.add_argument("--max_time_steps", type=int, default=25)
-parser.add_argument("--output_dir", default="./blocks_building_data")
+parser.add_argument("--output_dir", default="./IL/data/hdf5/blocks_building")
 parser.add_argument("--output_name", type=str, default="episode_0")
 args = parser.parse_args()
 
@@ -99,7 +99,6 @@ def arm_action_callback(data: JointState):
         arm_joint_names, data.name, data.position
     )
 
-
 def gripper_action_callback(data: Float64):
     current_action["gripper"] = data.data
 
@@ -107,10 +106,10 @@ def gripper_action_callback(data: Float64):
 rospy.init_node("blocks_building_data_recorder")
 
 print("camera_names:", camera_names)
-image_recorder = ImageRecorderRos(camera_names, topic_names=None, show_images=True)
-# check images shape
-for shape in image_recorder.get_images_shape():
-    assert tuple(shape) == image_shape
+image_recorder = ImageRecorderRos(camera_names, topic_names=None, show_images=True, image_shape=image_shape)
+# # check images shape
+# for shape in image_recorder.get_images_shape():
+#     assert tuple(shape) == image_shape
 
 states_suber = rospy.Subscriber(states_topic, JointState, joint_states_callback)
 arm_action_suber = rospy.Subscriber(arm_action_topic, JointState, arm_action_callback)
