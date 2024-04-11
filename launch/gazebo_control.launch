@@ -1,0 +1,15 @@
+<launch>
+    <include file="$(find airbot_play_gazebo)/launch/demo.launch">
+        <arg name="use_xacro"  value="true" />
+        <arg name="world_name" value="airbot_play_gazebo_worlds/desk_sky_2cubes_static.world" />
+        <arg name="world_pose" value="-x 0 -y -0.2 -z 0.775 -R 0 -P 0 -Y 1.57" />
+        <arg name="image_view" value="false" />
+        <arg name="model_name" value="airbot_play_gripper_with_2simple_usb_camera_gazebo" />
+    </include>
+    <include file="$(find airbot_play_launch)/airbot_play_moveit.launch">
+        <arg name="target_moveit_config" value="airbot_play_v3_gripper_gazebo_all_config" />
+        <arg name="use_basic" value="true" />
+        <arg name="use_rviz"  value="true" />
+        <arg name="use_gripper" value="true" />
+    </include>
+</launch>
