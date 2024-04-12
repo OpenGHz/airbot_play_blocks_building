@@ -7,6 +7,11 @@ import argparse
 from robot_tools.recorder import ImageRecorderRos
 from robot_tools.datar import get_values_by_names
 from robot_tools.performancer import Memorier
+from robot_tools.pather import get_current_dir
+
+# import sys
+# sys.path.insert(0, get_current_dir(__file__))
+# from data_driven.hdf5er import save_one_episode
 from hdf5er import save_one_episode
 from tqdm import tqdm
 
@@ -18,7 +23,7 @@ parser.add_argument("--states_num", type=int, default=7)
 parser.add_argument("--name_space", default="/airbot_play")
 parser.add_argument("--frequency", type=int, default=25)
 parser.add_argument("-mts", "--max_time_steps", type=int, default=25)
-parser.add_argument("--output_dir", default="./IL/data/hdf5/blocks_building")
+parser.add_argument("--output_dir", default=f"{get_current_dir(__file__)}/IL/data/hdf5/blocks_building")
 parser.add_argument("-on", "--output_name", type=str, default="episode_0")
 args = parser.parse_args()
 

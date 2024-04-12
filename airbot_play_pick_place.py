@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from geometry_msgs.msg import TransformStamped
 import rospy
-import tf_conversions
+from robot_tools import transformations
 
 import numpy as np
 import math,time
@@ -51,7 +51,7 @@ class VisualPerception(object):
     def tf_to_xyzrpy(self,tf:TransformStamped):
         """ 将TransformStamped格式的数据转换为xyz和rpy """
         xyz = [tf.transform.translation.x,tf.transform.translation.y,tf.transform.translation.z]
-        rpy = list(tf_conversions.transformations.euler_from_quaternion([tf.transform.rotation.x,tf.transform.rotation.y,
+        rpy = list(transformations.euler_from_quaternion([tf.transform.rotation.x,tf.transform.rotation.y,
                                                                 tf.transform.rotation.z,tf.transform.rotation.w]))
         return xyz,rpy
 
@@ -239,7 +239,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         """ 获得反馈的偏差数据并进行适当转换处理 """
         self.update_current_state()  # 得到当前状态
         self.feedback_target_position = [relative_target.transform.translation.x,relative_target.transform.translation.y,relative_target.transform.translation.z]
-        self.feedback_target_euler = list(tf_conversions.transformations.euler_from_quaternion([relative_target.transform.rotation.x,relative_target.transform.rotation.y,
+        self.feedback_target_euler = list(transformations.euler_from_quaternion([relative_target.transform.rotation.x,relative_target.transform.rotation.y,
                                                                 relative_target.transform.rotation.z,relative_target.transform.rotation.w]))
 
         # 图像坐标系转换为机械臂末端坐标系
@@ -835,7 +835,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         target.transform.translation.x = 0
         target.transform.translation.y = 0
         target.transform.translation.z = 0
-        tf_q = tf_conversions.transformations.quaternion_from_euler(0,0,0)
+        tf_q = transformations.quaternion_from_euler(0,0,0)
         target.transform.rotation.x = tf_q[0]
         target.transform.rotation.y = tf_q[1]
         target.transform.rotation.z = tf_q[2]
