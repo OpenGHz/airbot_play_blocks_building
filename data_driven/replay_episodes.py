@@ -17,6 +17,7 @@ def main(args):
     can_bias = args["can_bias"]
     urdf_path = args["urdf_path"]
     task_name = args["task_name"]
+    robot_name = args["robot_name"]
     DT = 1.0 / args["control_freq"]
     assert camera_names is not None, "Camera names must be provided"
     # assert robots_num==2 and len(camera_names) == 4, "Two robots should have 4 cameras"
@@ -51,18 +52,39 @@ def main(args):
 
     # 动作回放
     if not ignore_actions:
-        # modify the path to the airbot_play urdf file
-        import airbot
-        # specify the fk/ik/dk classes to use
-        fk = airbot.AnalyticFKSolver(urdf_path)
-        ik = airbot.ChainIKSolver(urdf_path)
-        id = airbot.ChainIDSolver(urdf_path, "down")
-        # instance the airbot player
         robots_list = []
-        for i in range(robots_num):
-            robots_list.append(airbot.create_agent(
-                fk, ik, id, f"can{i+can_bias}", 1.0, "gripper", False, False
-            ))
+        if robot_name == "airbot_play":
+            # modify the path to the airbot_play urdf file
+            import airbot
+            # specify the fk/ik/dk classes to use
+            fk = airbot.AnalyticFKSolver(urdf_path)
+            ik = airbot.ChainIKSolver(urdf_path)
+            id = airbot.ChainIDSolver(urdf_path, "down")
+            # instance the airbot player
+            for i in range(robots_num):
+                robots_list.append(airbot.create_agent(
+                    fk, ik, id, f"can{i+can_bias}", 1.0, "gripper", False, False
+                ))
+        elif "ros" in robot_name:
+            from ros_robot import RosRobot
+            import rospy
+            rospy.init_node("replay_episodes")
+            namespace = "/airbot_play"
+            states_topic = f"{namespace}/joint_states"
+            arm_action_topic = f"{namespace}/arm_group_position_controller/command"
+            gripper_action_topic = f"{namespace}/gripper_group_position_controller/command"
+            states_num = 7
+            default_joints = [0.0] * 7
+            for i in range(robots_num):
+                robots_list.append(
+                    RosRobot(
+                        states_topic,
+                        arm_action_topic,
+                        gripper_action_topic,
+                        states_num,
+                        default_joints,
+                    )
+                )
 
         print(f"Moving to start pose:{actions[0]}...")
         for index, robot in enumerate(robots_list):
@@ -142,11 +164,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-cn",
         "--camera_names",
-        action="store",
-        type=str,
+        nargs="+", 
+        default=("0", "1"),
         help="Camera names.",
-        required=False,
-        default=["0", "1", "2"],
     )
     parser.add_argument(
         "-nc",
@@ -202,5 +222,13 @@ if __name__ == "__main__":
         type=str,
         default="",  # "slantec_ydn", "" means no mobile
         help="Mobile type.",
+    )
+    parser.add_argument(
+        "-rna",
+        "--robot_name",
+        action="store",
+        type=str,
+        default="airbot_play",
+        help="Robot name.",
     )
     main(vars(parser.parse_args()))
