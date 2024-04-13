@@ -1,6 +1,7 @@
 import rospy
 from robot_tools.roser import Launcher
 from robot_tools.multi_tp import run_command
+from robot_tools.pather import get_current_dir
 import time
 import argparse
 import random
@@ -12,11 +13,18 @@ parser.add_argument("-ee", "--end_episode", type=int, default=10, help="end epis
 parser.add_argument(
     "-pp", "--python_path", type=str, default="python3", help="python path"
 )
+parser.add_argument(
+    "-ns", "--no_show", action="store_true", help="no show the image"
+)
+parser.add_argument(
+    "-nr", "--no_record", action="store_true", help="no record the data"
+)
 args = parser.parse_args()
 
 start_episode = args.start_episode
 end_episode = args.end_episode
 python_path = args.python_path
+not_show = "-ns" if args.no_show else ""
 
 
 print("Start auto recording.")
@@ -25,7 +33,7 @@ for ep in range(start_episode, end_episode + 1):
     # start gazebo and moveit
     print("start gazebo and moveit")
     launcher = Launcher(
-        "/home/ghz/Work/Demos/airbot_play_blocks_building/launch/gazebo_control.launch"
+        f"{get_current_dir(__file__)}/launch/gazebo_control.launch"
     )
     launcher.start()
     rospy.sleep(10)
