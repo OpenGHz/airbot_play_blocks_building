@@ -84,7 +84,24 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self._cube_height = configs["CUBE_HEIGHT"]
         # 添加预置关节角位姿
         if configs['PICK_JOINT'] == "AUTO":
-            self.preset_pose['PickJoint'] = self.change_pose_to_joints(list(self._pick_scan_xyz_dict[0]) + list(self._pick_rpy))
+            self.preset_pose['PickJoint'] = (0,) * self.joints_num
+            error_max = 10
+            error_cnt = 0
+            while self.preset_pose['PickJoint'][-1] <= 0:
+                try:
+                    self.preset_pose['PickJoint'] = self.change_pose_to_joints(list(self._pick_scan_xyz_dict[0]) + list(self._pick_rpy))
+                except:
+                    error_cnt += 1
+                    if error_cnt == error_max:
+                        raise Exception("Pick Joint Can't be got.")
+            # all_cnt = 50
+            # neg = 0
+            # for _ in range(all_cnt):
+            #     self.preset_pose['PickJoint'] = self.change_pose_to_joints(list(self._pick_scan_xyz_dict[0]) + list(self._pick_rpy))
+            #     if self.preset_pose['PickJoint'][-1] < 0:
+            #         neg += 1
+            #     print(self.preset_pose['PickJoint'])
+            # print("negative times:", neg), exit(0)  # 经判断末端为负的次数总是少于为正的
         else:
             if max(np.abs(configs['PICK_JOINT'])) > 2*np.pi:  # 自动检测degree并转换
                 self.preset_pose['PickJoint'] = (np.array(configs['PICK_JOINT'])*np.pi/180).tolist()
