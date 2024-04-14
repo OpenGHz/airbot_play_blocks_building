@@ -6,3 +6,4 @@ opencv-python
 h5py
 scipy
 tqdm
+std_vision
