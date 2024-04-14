@@ -124,8 +124,13 @@ gripper_action_suber = rospy.Subscriber(
 
 print("Waiting for the first arm and gripper message...")
 current_body_state: JointState = rospy.wait_for_message(states_topic, JointState)
+
+# 这种两次等待仅适用于持续发送的消息，对于只发送一次的消息，需要使用其他方法
+# 否则容易因为不同电脑的性能差异导致错过短期消息而判定为消息未发送
 assert len(rospy.wait_for_message(arm_action_topic, JointState).name) == 6
-rospy.wait_for_message(gripper_action_topic, Float64).data
+# 所以改成了这种方式
+while current_action["gripper"] is None:
+    rospy.sleep(0.5)
 
 print("Waiting for the best contour node started...")
 while not rospy.get_param("/best_contour_started", False):

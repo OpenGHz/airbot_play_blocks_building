@@ -18,12 +18,35 @@ parser.add_argument("-ns", "--no_show", action="store_true", help="no show the i
 parser.add_argument(
     "-nr", "--no_record", action="store_true", help="no record the data"
 )
+parser.add_argument(
+    "-mts", "--max_time_step", type=int, default=800, help="max time step"
+)
+parser.add_argument(
+    "-picp",
+    "--pick_control_param_limit",
+    nargs=2,
+    type=int,
+    default=[70, 85],
+    help="pick control param limit",
+)
+parser.add_argument(
+    "-plcp",
+    "--place_control_param_limit",
+    nargs=2,
+    type=int,
+    default=[90, 110],
+    help="place control param limit",
+)
 args = parser.parse_args()
 
 start_episode = args.start_episode
 end_episode = args.end_episode
 python_path = args.python_path
 not_show = "-ns" if args.no_show else ""
+not_record = "-nr" if args.no_record else ""
+max_time_step = args.max_time_step
+pick_control_param_limit = args.pick_control_param_limit
+place_control_param_limit = args.place_control_param_limit
 
 
 print("Start auto recording.")
@@ -38,15 +61,15 @@ for ep in range(start_episode, end_episode + 1):
     # python3 record_data.py -mts 800 -on episode_7
     print("start record data")
     p_record_data = SubCLIer.run(
-        f"python3 data_driven/record_data.py -mts 800 -on episode_{ep}",
+        f"python3 data_driven/record_data.py -mts {max_time_step} -on episode_{ep}",
         sleeps=1,
     )
 
     # start pick and place
     # ./run_pick_place.sh go 76 95
     print("start pick and place")
-    pick_k = random.randint(70, 85)
-    place_k = random.randint(90, 110)
+    pick_k = random.randint(*pick_control_param_limit)
+    place_k = random.randint(*place_control_param_limit)
     p_run_pick_place = SubCLIer.run(
         f"./run_pick_place.sh go {pick_k} {place_k}", sleeps=10
     )
