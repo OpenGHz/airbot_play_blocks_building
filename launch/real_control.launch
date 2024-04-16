@@ -4,5 +4,6 @@
         <arg name="target_moveit_config" value="airbot_play_v3_gripper_gazebo_all_config" />
         <arg name="use_basic" value="true" />
         <arg name="use_rviz"  value="true" />
+        <arg name="arm_cmd_topic" value="/airbot_play/set_target_joint_q" />
     </include>
 </launch>
