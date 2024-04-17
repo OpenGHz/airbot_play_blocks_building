@@ -5,5 +5,6 @@
         <arg name="use_basic" value="true" />
         <arg name="use_rviz"  value="true" />
         <arg name="arm_cmd_topic" value="/airbot_play/set_target_joint_q" />
+        <arg name="frequency" value="200" />
     </include>
 </launch>
