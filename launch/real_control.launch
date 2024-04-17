@@ -1,5 +1,12 @@
 <launch>
-    <include file="$(find ros_interface)/launch/airbot_arm.launch" />
+    <arg name="urdf" default="/usr/local/share/airbot_play/airbot_play_v2_1/urdf/airbot_play_v2_1_with_gripper.urdf" />
+    <arg name="interface" default="can0" />
+    <arg name="end_mode" default="gripper" />
+    <include file="$(find ros_interface)/launch/airbot_arm.launch">
+        <arg name="urdf" value="$(arg urdf)" />
+        <arg name="interface" value="$(arg interface)" />
+        <arg name="end_mode" value="$(arg end_mode)" />
+    </include>
     <include file="$(find airbot_play_launch)/airbot_play_moveit.launch">
         <arg name="target_moveit_config" value="airbot_play_v3_gripper_gazebo_all_config" />
         <arg name="use_basic" value="true" />
