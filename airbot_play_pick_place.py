@@ -111,9 +111,9 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
     def task_pick_place_param_init(self,area_mode=0,use_tof=False,control_mode='g_i',sim_type=None):
         """ 初始化搭积木任务的参数 """
         # 基本外部参数配置
-        self.use_sim = False if sim_type is None else True
+        self.use_sim = False if sim_type in [None, "real"] else True
         self.loginfo(f'use_sim={self.use_sim}')
-        self.sim_type = sim_type
+        self.sim_type = sim_type if sim_type != "real" else None
         self.pick_place_area_mode = area_mode
         # 根据load的分量组建完整pose
         self.prepose_pick_scan = tuple(self._pick_scan_xyz_dict[0]) + self._pick_rpy
@@ -706,13 +706,14 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             if use_tof:
                 self.set_and_go_to_pose_target([self._place_detect_x,self._place_xy[1],disget_z],self._place_rpy,sleep_time=2,vel_limit=0.4,acc_limit=0.2)
             else:
-                if self.sim_type in [None,'isaac','gibson','gazebo_fx', 'gazebo']:
+                if self.sim_type in [None, 'real', 'isaac','gibson','gazebo_fx', 'gazebo']:
                     print(self._place_xy, disget_z, self._place_rpy)
                     self.set_and_go_to_pose_target([*self._place_xy, disget_z], self._place_rpy,sleep_time=1,vel_limit=0.4,acc_limit=0.2)
                 # elif self.sim_type == 'gazebo':
                 #     # self.set_and_go_to_pose_target([self._place_xy[0],self._place_xy[1]+0.015*(disget_z/0.02-24),disget_z],self._place_rpy,sleep_time=1,vel_limit=0.4,acc_limit=0.2)
                 #     self.set_and_go_to_pose_target([self._place_xy[0]-0.01, self._place_xy[1], disget_z], self._place_rpy,sleep_time=1,vel_limit=0.4,acc_limit=0.2)
-                else: raise Exception('sim_type error')
+                else:
+                    raise Exception(f'sim_type error:{sim_type}')
             # 停稳后（一定要保证停稳），获取物块此时的配合值（必然大于0且小于(0.025+self._above_gap_disget)，若大于0.025则上次物块搭建是失败了的，为此整轮应进行回退）
             self.distance_detect(use_sim=self.use_sim, use_tof=use_tof)
             # 然后移动到可以开始调节的位置
@@ -726,7 +727,8 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
                 #     self.set_and_go_to_pose_target([self._place_xy[0]-0.01,self._place_xy[1], adjust_z],self._place_rpy,sleep_time=2,vel_limit=0.004,acc_limit=0.002)
                 # elif self.sim_type == 'gazebo_fx':
                 #     self.set_and_go_to_pose_target([self._place_xy[0]-0.01,self._place_xy[1], adjust_z],self._place_rpy,sleep_time=2,vel_limit=0.004,acc_limit=0.002)
-                else: raise Exception("sim_type error")
+                else:
+                    raise Exception(f"sim_type error{self.sim_type}")
             else:  # 实机当高度增加时，会出现x方向前移的问题，造成下层物块难识别，为此调节位置x方向向后偏移一定距离
                 if place_mode == 0:  # 闭环自动（实机经过一些特殊处理）
                     self.set_and_go_to_pose_target([self._place_xy[0],self._place_xy[1],adjust_z],self._place_rpy,sleep_time=2)
@@ -892,7 +894,7 @@ if __name__ == "__main__":
     gripper = args.gripper  # 夹爪类型
     auto_follow = not(args.not_auto)  # 是否自动
     auto_pick_place = not(args.not_auto_pick_place)  # 是否自动夹取
-    sim_type = None if not sim else 'gazebo' if args.gazebo else 'gibson' if args.gibson else 'isaac'  # 仿真类型
+    sim_type = "real" if not sim else 'gazebo' if args.gazebo else 'gibson' if args.gibson else 'isaac'  # 仿真类型
     control_param = args.control_param
     print(f'sim_type={sim_type}')
 
@@ -908,6 +910,7 @@ if __name__ == "__main__":
     sim_type = 'gazebo_fx' if args.fixed else sim_type  # 最后修改gazebo的fix模式
     print('new_sim_type:',sim_type)
     airbot_player = AIRbotPlayPickPlace(init_pose=None,node_name=NODE_NAME,gripper=(gripper_type, gripper_control),other_config=other_config)
+    airbot_player.gripper_control(0)
 
     # 参数配置
     if args.use_real:

@@ -28,6 +28,18 @@ if __name__ == '__main__':
     parser.add_argument('-rt', '--rotate_180', action='store_true', help='rotate 180 degree')
     args, unknown = parser.parse_known_args()
 
+    sim_player_nums = rospy.get_param("/airbot_play/sim_player_nums", default=0)
+    device:str = args.video_device
+    print(device.isdigit())
+    if sim_player_nums == 0:
+        args.use_real = True
+        print(device)
+        if not device.isdigit():
+            args.video_device = device = "2"
+        print("Use video device: ", device)
+    else:
+        print("Use topic: ", device)
+
     # 参数配置
     if args.config_path not in ['None','none', '']:
         current_dir = pather.get_current_dir(__file__)
@@ -188,7 +200,8 @@ if __name__ == '__main__':
                     loginfo(f'中心坐标为：({center_xy[0]:.1f},{center_xy[1]:.1f});w_h为：({w_h[0]:.1f},{w_h[1]:.1f})')
                     loginfo(f'上边沿为：{center_xy[1] - w_h[0]/2}')
             # 图像展示
-            StdVideo.Show('Output',frame,wait_time=1,disable=args.not_show)
+            StdVideo.Show('Output',frame,wait_time=1,disable=args.not_show,show_fps=False)
+            return frame
 
     """ ***********程序内置参考用识别参数配置************ """
     # 颜色阈值
@@ -269,7 +282,6 @@ if __name__ == '__main__':
         print('等待视频流稳定......')
         time.sleep(2)
         print('开始获取图像')
-    device:str = args.video_device
     if not device.isdigit():
         """ 获取相机参数，主要是用到了宽和高来作为参考"""
         try:
@@ -286,6 +298,9 @@ if __name__ == '__main__':
         rospy.spin()
     else:  # 实机
         device = int(device)
+        # image_size = (1280, 720)
+        # image_size = (640, 480)
+        # cap = StdVideo.Cap(device, wh_set=image_size)
         cap = StdVideo.Cap(device)
         ImageSize = [int(StdVideo.Info(device, Types.CAP_FRAME_WIDTH)),
                      int(StdVideo.Info(device, Types.CAP_FRAME_HEIGHT))]
@@ -296,5 +311,5 @@ if __name__ == '__main__':
             # 将图像旋转180度
             if args.rotate_180:
                 frame = Geometry.Rotation(frame, 180)
-            image_process(frame)
+            frame = image_process(frame)
             RosTools.ros_spin_once(0.001)

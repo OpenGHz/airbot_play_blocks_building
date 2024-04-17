@@ -1,12 +1,12 @@
 {
-    "HSV1_L":[52, 158, 250], "HSV1_H":[163, 255, 255],
-    "HSV2_L": [50,145,40], "HSV2_H": [75,255,255],
-    "EXPECT_PICK_REF": 623.5,
-    "EXPECT_PLACE_REF": 559.256,
-    "EXPECT_X": "AUTO",
+    "HSV1_L":[135, 23, 114], "HSV1_H":[156, 255, 255],
+    "HSV2_L":[49, 46, 30], "HSV2_H":[78, 255, 255],
+    "EXPECT_PICK_REF": 407.5,
+    "EXPECT_PLACE_REF": 356.5,
+    "EXPECT_X": 347.5,
     "USE_PLACE_HSV": "False",
     "HSV1_L_P": [89, 74, 48],"HSV1_H_P": [157, 255, 255],
     "HSV2_L_P": [66, 78, 81],"HSV2_H_P": [88,255,255],
     "AREA_LIMIT_PICK": [2000, 80000],
-    "AREA_LIMIT_PLACE": [1000, 20000]
+    "AREA_LIMIT_PLACE": [500, 20000]
 }
