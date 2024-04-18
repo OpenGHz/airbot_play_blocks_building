@@ -87,7 +87,7 @@ def main(args):
         for index, robot in enumerate(robots_list):
             first = index * 6
             last = first + 6
-            robot.set_target_joint_q(actions[0][first:last])
+            robot.set_target_joint_q(actions[0][first:last], False)
             robot.set_target_end(actions[0][last])
         time.sleep(3)
 
