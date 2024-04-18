@@ -56,15 +56,12 @@ def main(args):
         if robot_name == "airbot_play":
             # modify the path to the airbot_play urdf file
             import airbot
-            # specify the fk/ik/dk classes to use
-            fk = airbot.AnalyticFKSolver(urdf_path)
-            ik = airbot.ChainIKSolver(urdf_path)
-            id = airbot.ChainIDSolver(urdf_path, "down")
             # instance the airbot player
+            urdf_path = airbot.AIRBOT_PLAY_URDF
+            vel = 1.0
             for i in range(robots_num):
                 robots_list.append(airbot.create_agent(
-                    fk, ik, id, f"can{i+can_bias}", 1.0, "gripper", False, False
-                ))
+                    urdf_path, "down", f"can{i+can_bias}", vel, "gripper"))
         elif "ros" in robot_name:
             from ros_robot import RosRobot
             import rospy

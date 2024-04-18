@@ -423,7 +423,7 @@ if __name__ == "__main__":
         "-rd",
         "--root_dir",
         type=str,
-        default=f"{os.getcwd()}/demonstrations/raw/",
+        default=f"{os.getcwd()}/demonstrations/",
     )
     parser.add_argument("-tn", "--task_name", type=str, default="test_task")
     parser.add_argument("-jn", "--json_name", type=str, default="records")
