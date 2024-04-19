@@ -19,6 +19,7 @@ def main(args):
     task_name = args["task_name"]
     robot_name = args["robot_name"]
     DT = 1.0 / args["control_freq"]
+    vcan = "v" if args["virtual_can"] else ""
     assert camera_names is not None, "Camera names must be provided"
     # assert robots_num==2 and len(camera_names) == 4, "Two robots should have 4 cameras"
     if urdf_path == "":
@@ -61,7 +62,7 @@ def main(args):
             vel = 1.0
             for i in range(robots_num):
                 robots_list.append(airbot.create_agent(
-                    urdf_path, "down", f"can{i+can_bias}", vel, "gripper"))
+                    urdf_path, "down", f"{vcan}can{i+can_bias}", vel, "gripper"))
         elif "ros" in robot_name:
             from ros_robot import RosRobot
             import rospy
@@ -227,5 +228,11 @@ if __name__ == "__main__":
         type=str,
         default="airbot_play",
         help="Robot name.",
+    )
+    parser.add_argument(
+        "-vcan",
+        "--virtual_can",
+        action="store_true",
+        help="Virtual can.",
     )
     main(vars(parser.parse_args()))
