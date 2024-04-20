@@ -138,7 +138,7 @@ class Raw2Hdf5(object):
             set(self.keys)
         ), f"names: {names_set} not subset of data keys: {self.keys}"
         # 检查最后一个目标episode是否存在
-        if not os.path.exists(self.task_path + f"{self.episode_num - 1}"):
+        if not os.path.exists(self.task_path + f"{self.end_episode}"):
             raise ValueError(
                 f"episode_num: {self.episode_num} not exist in {self.task_path}"
             )
