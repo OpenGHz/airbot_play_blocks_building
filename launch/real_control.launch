@@ -1,5 +1,5 @@
 <launch>
-    <arg name="urdf" default="/usr/local/share/airbot_play/airbot_play_v2_1/urdf/airbot_play_v2_1_with_gripper.urdf" />
+    <arg name="urdf" default="/usr/share/airbot_models/airbot_play_with_gripper.urdf" />
     <arg name="interface" default="can0" />
     <arg name="end_mode" default="gripper" />
     <arg name="forearm_type" default="DM" />
