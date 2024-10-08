@@ -30,12 +30,11 @@ if __name__ == '__main__':
 
     sim_player_nums = rospy.get_param("/airbot_play/sim_player_nums", default=0)
     device:str = args.video_device
-    print(device.isdigit())
     if sim_player_nums == 0:
         args.use_real = True
-        print(device)
-        if not device.isdigit():
-            args.video_device = device = "2"
+        # print(device)
+        # if not device.isdigit():
+        #     args.video_device = device = "2"
         print("Use video device: ", device)
     else:
         print("Use topic: ", device)
@@ -296,7 +295,7 @@ if __name__ == '__main__':
         rospy.Subscriber(device, Image, image_process, queue_size=1)
         com_print(ImageSize)
         rospy.spin()
-    else:  # 实机
+    else:  # USB camera
         device = int(device)
         # image_size = (1280, 720)
         # image_size = (640, 480)
