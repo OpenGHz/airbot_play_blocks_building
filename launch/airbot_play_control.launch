@@ -1,0 +1,15 @@
+<launch>
+    <arg name="ip" default="localhost" />
+    <arg name="port" default="50051" />
+    <node name="airbot_arm_ros" pkg="airbot_play_follow_basic" type="ros_interface.py" output="screen">
+        <param name="ip" value="$(arg ip)" />
+        <param name="port" value="$(arg port)" />
+    </node>
+    <include file="$(find airbot_play_launch)/airbot_play_moveit.launch">
+        <arg name="target_moveit_config" value="airbot_play_v3_gripper_gazebo_all_config" />
+        <arg name="use_basic" value="true" />
+        <arg name="use_rviz"  value="true" />
+        <arg name="arm_cmd_topic" value="/airbot_play/set_target_joint_q" />
+        <arg name="frequency" value="200" />
+    </include>
+</launch>
