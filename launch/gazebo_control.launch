@@ -1,8 +1,8 @@
 <launch>
-    <arg name="world_name" default="airbot_play_gazebo_worlds/desk_sky_2cubes_static.world" />
-    <arg name="world_pose" default="-x 0 -y -0.2 -z 0.775 -R 0 -P 0 -Y 1.57" />
-    <arg name="model_name" default="airbot_play_gripper_with_2simple_usb_camera_gazebo" />
-    <arg name="image_view" default="false" />
+    <arg name="world_name" default="airbot_play_gazebo_worlds/desk_sky_box_3cubes_static.world" />
+    <arg name="world_pose" default="-x 0 -y -0.2 -z 1.08 -R 0 -P 0 -Y 1.57" />
+    <arg name="model_name" default="airbot_play_gripper_with_simple_usb_camera_gazebo" />
+    <arg name="image_view" default="true" />
     <arg name="use_gripper" default="true" />
     <arg name="arm_cmd_topic" default="/airbot_play/joint_cmd"/>
     <include file="$(find airbot_play_gazebo)/launch/demo.launch">

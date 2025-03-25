@@ -1,0 +1,11 @@
+<launch>
+    <arg name="env_type" default="real"/>
+    <param name="env_type" value="$(arg env_type)"/>
+    <include file="$(find airbot_play_launch)/airbot_play_moveit.launch">
+        <arg name="target_moveit_config" value="airbot_play_v3_gripper_gazebo_all_config" />
+        <arg name="use_basic" value="true" />
+        <arg name="use_rviz"  value="false" />
+        <arg name="arm_cmd_topic" value="/airbot_play/joint_cmd" />
+        <arg name="frequency" value="200" />
+    </include>
+</launch>

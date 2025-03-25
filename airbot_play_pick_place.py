@@ -107,6 +107,9 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
                 self.preset_pose['PickJoint'] = (np.array(configs['PICK_JOINT'])*np.pi/180).tolist()
             else:
                 self.preset_pose['PickJoint'] = configs['PICK_JOINT']
+        self._gap_place = configs.get('GAP_PLACE', 0.003)
+        self._gap_disget = self._gap_place # 检测物块搭建的实际高度时的位置裕量
+        rospy.loginfo("gap_place: {}".format(self._gap_place))
 
     def task_pick_place_param_init(self,area_mode=0,use_tof=False,control_mode='g_i',sim_type=None):
         """ 初始化搭积木任务的参数 """
@@ -142,8 +145,6 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self._pick_place_stage = 'pick'  # 首次进入始终意味着阶段初始化为pick
         self.pick_place_0_1 = 0
         self.__auto_pick_place = False
-        self._gap_disget = 0.003  # 检测物块搭建的实际高度时的位置裕量
-        self._gap_place  = 0.003  # 视觉调整时两个物块之间的上下距离间隙
         # 高度限制
         self._max_z = 0.253 + 0.6  # 机械臂z轴支持的最高高度，实测?
         self._max_cubes_num = int((self._max_z-self._place_base_z)/self._cube_height) + 1  # 计算得到的理论上支持的最多的物块数量
@@ -913,7 +914,10 @@ if __name__ == "__main__":
     airbot_player.gripper_control(0)
 
     # 参数配置
-    if args.use_real:
+    env_type = rospy.get_param("/env_type", default=None)
+    if env_type:
+        file_path = f'./configs/control/{env_type}.json'
+    elif args.use_real:
         file_path = './configs/control/real.json'
     elif args.gazebo:
         file_path = './configs/control/gazebo.json'
@@ -921,6 +925,7 @@ if __name__ == "__main__":
         file_path = './configs/control/gibson.json'
     else:
         file_path = './configs/control/isaac.json'
+    rospy.loginfo(f'load control config from {file_path}')
     airbot_player.load_configs(file_path)
 
     # 根据真机还是仿真初始化pick & place 任务

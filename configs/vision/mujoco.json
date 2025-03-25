@@ -1,0 +1,12 @@
+{
+    "HSV1_L": [40, 104, 41],"HSV1_H": [104, 205, 255],
+    "HSV2_L": [107, 57, 10],"HSV2_H": [136, 250, 255],
+    "EXPECT_PICK_REF": 429.5,
+    "EXPECT_PLACE_REF": 385.5,
+    "EXPECT_X": "AUTO",
+    "USE_PLACE_HSV": "False",
+    "HSV1_L_P": [40, 104, 41],"HSV1_H_P": [104, 205, 255],
+    "HSV2_L_P": [107, 57, 10],"HSV2_H_P": [136, 250, 255],
+    "AREA_LIMIT_PICK": [1000, 10000],
+    "AREA_LIMIT_PLACE": [600, 10000]
+}

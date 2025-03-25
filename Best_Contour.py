@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('-ng','--negative',action='store_true',help='negative place')
     parser.add_argument('-ns','--not_show',action='store_true',help='show img or not')
     parser.add_argument('-t','--test',type=str, help='test mode: pi0 pi1 pl0 pl1',default='no')
-    parser.add_argument('-cfg','--config_path',type=str, help='config file path',default='./configs/vision/gazebo.json')
+    parser.add_argument('-cfg','--config_path',type=str, help='config file path',default='./configs/vision/mujoco.json')
     parser.add_argument('-dfv','--default_hsv',type=str, help='use default hsv config: real or isaac',default='')
     parser.add_argument('-dfr','--default_ref',type=str, help='use default ref config: real or isaac',default='')
     parser.add_argument('-vd', '--video_device', type=str, help='video device', default="/camera/color/image_raw")
