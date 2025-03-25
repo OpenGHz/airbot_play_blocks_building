@@ -29,6 +29,7 @@ if __name__ == '__main__':
     args, unknown = parser.parse_known_args()
 
     sim_player_nums = rospy.get_param("/airbot_play/sim_player_nums", default=0)
+    env_type = rospy.get_param("/env_type", default=None)
     device:str = args.video_device
     if sim_player_nums == 0:
         args.use_real = True
@@ -48,8 +49,8 @@ if __name__ == '__main__':
             config_path = current_dir + args.config_path
         else:
             config_path = args.config_path
-        if args.use_real:
-            config_path = config_path.replace('gazebo','real')
+        if args.use_real and env_type is None:
+            config_path = config_path.replace('gazebo','real').replace('mujoco','real')
         print(f'载入配置文件路径：{config_path}')
         # 载入配置文件
         configs = recorder.json_process(config_path)
