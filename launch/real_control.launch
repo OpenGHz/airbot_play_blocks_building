@@ -5,18 +5,27 @@
     <arg name="forearm_type" default="DM" />
     <arg name="use_planning" default="true" />
     <arg name="use_joy" default="false" />
-    <node name="airbot_arm_ros" pkg="ros_interface" type="airbot_arm_ros" output="screen">
+    <arg name="use_rviz" default="true" />
+    <arg name="use_grpc" default="true" />
+    <arg name="url" default="localhost" />
+    <arg name="port" default="50051" />
+    <node unless="$(arg use_grpc)" name="airbot_arm_ros" pkg="ros_interface" type="airbot_arm_ros" output="screen">
         <param name="urdf" value="$(arg urdf)" />
         <param name="interface" value="$(arg interface)" />
         <param name="end_mode" value="$(arg end_mode)" />
         <param name="forearm_type" value="$(arg forearm_type)" />
         <param name="use_planning" value="$(arg use_planning)" />
     </node>
+    <node if="$(arg use_grpc)" name="airbot_arm_ros" pkg="airbot_play_follow_basic" type="airbot_play_ros_interface.py" output="screen">
+        <param name="url" value="$(arg url)" />
+        <param name="port" value="$(arg port)" />
+    </node>
     <include file="$(find airbot_play_launch)/airbot_play_moveit.launch">
         <arg name="target_moveit_config" value="airbot_play_v3_gripper_gazebo_all_config" />
         <arg name="use_basic" value="true" />
-        <arg name="use_rviz"  value="true" />
-        <arg name="arm_cmd_topic" value="/airbot_play/set_target_joint_q" />
+        <arg name="use_rviz"  value="$(arg use_rviz)" />
+        <arg name="arm_cmd_topic" value="/airbot_play/joint_cmd" />
         <arg name="frequency" value="200" />
+        <arg name="use_gripper" value="false" />
     </include>
 </launch>
