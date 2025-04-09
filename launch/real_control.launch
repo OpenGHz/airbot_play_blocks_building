@@ -6,7 +6,7 @@
     <arg name="use_planning" default="true" />
     <arg name="use_joy" default="false" />
     <arg name="use_rviz" default="true" />
-    <arg name="use_grpc" default="true" />
+    <arg name="use_grpc" default="false" />
     <arg name="url" default="localhost" />
     <arg name="port" default="50051" />
     <node unless="$(arg use_grpc)" name="airbot_arm_ros" pkg="ros_interface" type="airbot_arm_ros" output="screen">
