@@ -24,7 +24,8 @@
         <arg name="target_moveit_config" value="airbot_play_v3_gripper_gazebo_all_config" />
         <arg name="use_basic" value="true" />
         <arg name="use_rviz"  value="$(arg use_rviz)" />
-        <arg name="arm_cmd_topic" value="/airbot_play/joint_cmd" />
+        <arg if="$(arg use_grpc)" name="arm_cmd_topic" value="/airbot_play/joint_cmd" />
+        <arg unless="$(arg use_grpc)" name="arm_cmd_topic" value="/airbot_play/set_target_joint_q" />
         <arg name="frequency" value="200" />
         <arg name="use_gripper" value="false" />
     </include>
