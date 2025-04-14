@@ -306,7 +306,7 @@ class Raw2Hdf5(object):
             no_base=not self.other_record["base"],
             no_effort=not self.other_record["eff"],
             no_velocity=not self.other_record["vel"],
-            compress=True if self.video_type == "avi" else False,
+            compress=True,
             states_num=self.states_num,
         )
         end_time = time.time()
