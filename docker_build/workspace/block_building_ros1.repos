@@ -6,12 +6,12 @@ repositories:
   airbot_play_moveit1_base:
     type: git
     url: https://github.com/OpenGHz/moveit1_interface.git
-    version: master
+    version: main
   airbot_play_control_upper:
     type: git
     url: https://gitlab.com/OpenGHz/airbot_play_control_upper.git
-    version: master
+    version: main
   airbot_play_gazebo:
     type: git
     url: https://github.com/OpenGHz/airbots_ros1_gazebo.git
-    version: master
+    version: main
