@@ -5,8 +5,8 @@ set -ex
 SRC_DIR=$1
 
 # Prepare workspace and packages
-apt install -y python3-pip python3-rosdep python3-vcstool python3-catkin-pkg git
-mkdir -p $SRC_DIR 
+apt install -y python3-vcstool python3-catkin-pkg git wget
+mkdir -p $SRC_DIR
 vcs import $SRC_DIR < block_building_ros1.repos
 
 # Configure packages
