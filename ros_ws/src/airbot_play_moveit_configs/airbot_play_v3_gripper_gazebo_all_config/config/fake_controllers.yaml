@@ -1,0 +1,20 @@
+controller_list:
+  - name: fake_airbot_play_arm_controller
+    type: $(arg fake_execution_type)
+    joints:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6
+  - name: fake_airbot_play_gripper_controller
+    type: $(arg fake_execution_type)
+    joints:
+      - endleft
+      - endright
+initial:  # Define initial robot poses per group
+  - group: airbot_play_arm
+    pose: Home
+  - group: airbot_play_gripper
+    pose: Home

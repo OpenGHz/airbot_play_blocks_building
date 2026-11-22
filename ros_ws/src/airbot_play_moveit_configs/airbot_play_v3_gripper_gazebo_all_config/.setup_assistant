@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: airbot_play_v3_gripper_gazebo
+    relative_path: urdf/airbot_play_v3_gripper_gazebo.urdf
+    xacro_args: ""
+  SRDF:
+    relative_path: config/airbot_play_v3_gripper_gazebo.srdf
+  CONFIG:
+    author_name: OpenGHz
+    author_email: wuhusd@qqd.com
+    generated_timestamp: 1711169677

@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot name="airbot_play_v3_gripper_gazebo" xmlns:xacro="http://wiki.ros.org/xacro">
+    <link name="base_link">
+        <inertial>
+            <origin xyz="-0.010729 -0.00017015 0.041712" rpy="0 0 0" />
+            <mass value="0.77705" />
+            <inertia ixx="0.0008454" ixy="-7.5E-06" ixz="2.06E-05" iyy="0.0011821" iyz="-6.4E-06" izz="0.0012443" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/base_link.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.75294 0.75294 0.75294 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/base_link.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <link name="link1">
+        <inertial>
+            <origin xyz="7.9126E-05 -0.002527 -0.0041359" rpy="0 0 0" />
+            <mass value="0.54639" />
+            <inertia ixx="0.0003462" ixy="0" ixz="-1.4E-06" iyy="0.0002863" iyz="-1.1E-06" izz="0.0003255" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link1.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.89804 0.91765 0.92941 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link1.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint1" type="revolute">
+        <origin xyz="0 0 0.1172" rpy="0 0 0" />
+        <parent link="base_link" />
+        <child link="link1" />
+        <axis xyz="0 0 1" />
+        <limit lower="-3.14" upper="2.09" effort="18" velocity="3.14" />
+    </joint>
+    <link name="link2">
+        <inertial>
+            <origin xyz="0.22493 0.0047721 0.008023" rpy="0 0 0" />
+            <mass value="0.64621" />
+            <inertia ixx="0.0004901" ixy="0.0005229" ixz="-0.0002434" iyy="0.0050391" iyz="-2.95E-05" izz="0.0051052" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link2.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.75294 0.75294 0.75294 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link2.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint2" type="revolute">
+        <origin xyz="0 0 0" rpy="1.5708 -2.7549 0" />
+        <parent link="link1" />
+        <child link="link2" />
+        <axis xyz="0 0 1" />
+        <limit lower="-2.96" upper="0.17" effort="18" velocity="3.14" />
+    </joint>
+    <link name="link3">
+        <inertial>
+            <origin xyz="0.16813 -5.5576E-05 0.0031184" rpy="0 0 0" />
+            <mass value="0.26829" />
+            <inertia ixx="0.000245" ixy="-4E-07" ixz="-0.0001263" iyy="0.0031527" iyz="-1E-07" izz="0.0030895" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link3.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.75294 0.75294 0.75294 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link3.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint3" type="revolute">
+        <origin xyz="0.27009 0 0" rpy="0 0 -2.7549" />
+        <parent link="link2" />
+        <child link="link3" />
+        <axis xyz="0 0 1" />
+        <limit lower="-0.087" upper="3.14" effort="18" velocity="3.14" />
+    </joint>
+    <link name="link4">
+        <inertial>
+            <origin xyz="5.2436E-06 0.00040412 -0.03228" rpy="0 0 0" />
+            <mass value="0.34876" />
+            <inertia ixx="0.0004235" ixy="0" ixz="4.7E-06" iyy="0.000412" iyz="-1E-07" izz="0.0001269" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link4.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link4.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint4" type="revolute">
+        <origin xyz="0.30854 0 0" rpy="3.1416 -1.5708 0" />
+        <parent link="link3" />
+        <child link="link4" />
+        <axis xyz="0 0 1" />
+        <limit lower="-2.96" upper="2.96" effort="3" velocity="6.28" />
+    </joint>
+    <link name="link5">
+        <inertial>
+            <origin xyz="8.3328E-06 0.026148 0.002525" rpy="0 0 0" />
+            <mass value="0.36132" />
+            <inertia ixx="0.0001825" ixy="0" ixz="-3.29E-05" iyy="0.0004677" iyz="0" izz="0.0004286" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link5.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.89804 0.91765 0.92941 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link5.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint5" type="revolute">
+        <origin xyz="0 0 0" rpy="1.5708 0 0" />
+        <parent link="link4" />
+        <child link="link5" />
+        <axis xyz="0 0 1" />
+        <limit lower="-1.74" upper="1.74" effort="3" velocity="6.28" />
+    </joint>
+    <link name="link6">
+        <inertial>
+            <origin xyz="-0.0047053 7.3857E-05 -0.12293" rpy="0 0 0" />
+            <mass value="0.53855" />
+            <inertia ixx="5E-05" ixy="0" ixz="0" iyy="5E-05" iyz="0" izz="3.85E-05" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link6.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.69804 0.69804 0.69804 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link6.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="joint6" type="revolute">
+        <origin xyz="0 0.23645 0" rpy="-1.5708 1.5708 0" />
+        <parent link="link5" />
+        <child link="link6" />
+        <axis xyz="0 0 1" />
+        <limit lower="-3.14" upper="3.14" effort="3" velocity="6.28" />
+    </joint>
+    <link name="left">
+        <inertial>
+            <origin xyz="-0.049039 -0.0096764 0.00038868" rpy="0 0 0" />
+            <mass value="0.061803" />
+            <inertia ixx="1.8946E-05" ixy="-1.3168E-06" ixz="-6.5528E-07" iyy="2.7277E-05" iyz="-2.0801E-07" izz="1.1981E-05" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/left.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/left.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="endleft" type="prismatic">
+        <origin xyz="0 0.04 0" rpy="3.14159 -1.5708 0" />
+        <parent link="link6" />
+        <child link="left" />
+        <axis xyz="0 1 0" />
+        <limit lower="0" upper="0.04" effort="3" velocity="0.05" />
+    </joint>
+    <link name="right">
+        <inertial>
+            <origin xyz="-0.048742 0.0096369 0.00044322" rpy="0 0 0" />
+            <mass value="0.0626" />
+            <inertia ixx="1.915E-05" ixy="1.343E-06" ixz="-6.8259E-07" iyy="2.7722E-05" iyz="2.0748E-07" izz="1.2248E-05" />
+        </inertial>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/right.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/right.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="endright" type="prismatic">
+        <origin xyz="0 -0.04 0" rpy="3.14159 -1.5708 0" />
+        <parent link="link6" />
+        <child link="right" />
+        <axis xyz="0 1 0" />
+        <limit lower="-0.04" upper="0" effort="3" velocity="0.05" />
+    </joint>
+    <link name="custom_end_link">
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <mass value="1E-15" />
+            <inertia ixx="1E-11" ixy="1E-15" ixz="1E-15" iyy="1E-11" iyz="1E-15" izz="1E-11" />
+        </inertial>
+    </link>
+    <joint name="joint_custom_end" type="fixed">
+        <origin xyz="0 0 0.02" rpy="0 -1.5708 0" />
+        <parent link="link6" />
+        <child link="custom_end_link" />
+    </joint>
+    <transmission name="trans_joint1">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint1">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint1_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint2">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint2">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint2_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint3">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint3">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint3_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint4">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint4">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint4_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint5">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint5">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint5_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_joint6">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="joint6">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="joint6_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_endleft">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="endleft">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="endleft_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_endright">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="endright">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="endright_motor">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <gazebo>
+        <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+            <robotNamespace>/</robotNamespace>
+        </plugin>
+    </gazebo>
+    <!-- Improve grasping physics -->
+    <gazebo reference="right">
+        <kp>1000000.0</kp>
+        <kd>1.0</kd>
+        <mu1>100.0</mu1>
+        <mu2>100.0</mu2>
+        <minDepth>0.001</minDepth>
+    </gazebo>
+    <gazebo reference="left">
+        <kp>1000000.0</kp>
+        <kd>1.0</kd>
+        <mu1>100.0</mu1>
+        <mu2>100.0</mu2>
+        <minDepth>0.001</minDepth>
+    </gazebo>
+    <!-- Gazebo grasping plugin -->
+    <gazebo>
+        <plugin name="gazebo_grasp_fix" filename="libgazebo_grasp_fix.so">
+            <arm>
+                <arm_name>airbot_play_v3_gripper_gazebo</arm_name>
+                <palm_link>link6</palm_link>
+                <gripper_link>right</gripper_link>
+                <gripper_link>left</gripper_link>
+            </arm>
+            <forces_angle_tolerance>120</forces_angle_tolerance>
+            <update_rate>330</update_rate>
+            <grip_count_threshold>1</grip_count_threshold>
+            <max_grip_count>8</max_grip_count>
+            <release_tolerance>0.01</release_tolerance>
+            <disable_collisions_on_attach>true</disable_collisions_on_attach>
+            <contact_topic>__default_topic__</contact_topic>
+        </plugin>
+    </gazebo>
+</robot>
+
