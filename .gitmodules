@@ -1,0 +1,9 @@
+[submodule "ros_ws/src/easy_arm_control"]
+	path = ros_ws/src/easy_arm_control
+	url = https://github.com/OpenGHz/easy-arm-control.git
+[submodule "ros_ws/src/airbot_play_moveit1_base"]
+	path = ros_ws/src/airbot_play_moveit1_base
+	url = https://github.com/OpenGHz/moveit1_interface.git
+[submodule "ros_ws/src/trac_ik"]
+	path = ros_ws/src/trac_ik
+	url = https://github.com/traclabs/trac_ik.git
