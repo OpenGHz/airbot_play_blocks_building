@@ -1,4 +1,0 @@
-# used for auto recording
-
-netifaces
-defusedxml
