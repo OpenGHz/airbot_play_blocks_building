@@ -1,0 +1,10 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/default/bin/python",
+  "files.associations": {
+    "*.launch": "xml"
+  },
+  "files.exclude": {
+    "ros_ws/build": true,
+    "ros_ws/logs": true
+  }
+}

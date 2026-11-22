@@ -1,0 +1,76 @@
+[workspace]
+name = "airbot_play_blocks_building"
+description = "AIRBOT Play blocks-building demo on a real robot: ROS Noetic + MoveIt via RoboStack, no Docker needed on the host"
+channels = ["robostack-noetic", "conda-forge"]
+platforms = ["linux-64"]
+license = "MIT"
+requires-pixi = ">=0.50"
+
+[dependencies]
+python = "3.12.*"
+# --- ROS / MoveIt: what the real-robot pipeline needs ---
+ros-noetic-ros-base = "*"
+ros-noetic-moveit-ros-move-group = "*"
+ros-noetic-moveit-ros-visualization = "*"
+ros-noetic-moveit-commander = "*"
+ros-noetic-moveit-kinematics = "*"
+ros-noetic-moveit-planners-ompl = "*"
+# The MoveIt config also declares CHOMP and Pilz planning pipelines.
+ros-noetic-moveit-planners-chomp = "*"
+ros-noetic-pilz-industrial-motion-planner = "*"
+ros-noetic-moveit-simple-controller-manager = "*"
+ros-noetic-rviz = "*"
+ros-noetic-robot-state-publisher = "*"
+ros-noetic-joint-state-publisher = "*"
+ros-noetic-tf2-ros = "*"
+ros-noetic-tf-conversions = "*"  # needed by trac_ik_kinematics_plugin
+ros-noetic-xacro = "*"
+ros-noetic-cv-bridge = "*"
+ros-noetic-kdl-parser = "*"
+# --- building the catkin workspace (trac_ik is compiled from source) ---
+catkin_tools = "*"
+compilers = "*"
+cmake = "*"
+make = "*"
+pkg-config = "*"
+nlopt = "*"
+# --- Python runtime dependencies ---
+numpy = "*"
+scipy = "*"
+matplotlib-base = "*"
+h5py = "*"
+tqdm = "*"
+netifaces = "*"
+defusedxml = "*"
+pyserial = "*"
+# conda's OpenCV (Qt GUI + V4L2) also satisfies std-vision's opencv-python
+# requirement, so there is exactly one cv2 in the environment.
+py-opencv = "*"
+
+[pypi-dependencies]
+robotics-tools = "==1.0.2"
+std-vision = "==1.0.4"
+easy-arm-control = { path = "ros_ws/src/easy_arm_control/pkgs", editable = true }
+# gRPC client of the arm service (airbot_server); not published on PyPI.
+airbot-py = { path = "vendor/airbot_py-5.1.6-py3-none-any.whl" }
+
+[activation]
+scripts = ["scripts/activate.sh"]
+
+[tasks]
+configure = { cmd = "bash ../scripts/configure_ws.sh", cwd = "ros_ws", description = "Initialise and configure the catkin workspace (idempotent)" }
+build = { cmd = "catkin build", cwd = "ros_ws", depends-on = ["configure"], description = "Build the ROS workspace" }
+clean = { cmd = "catkin clean -y", cwd = "ros_ws", description = "Remove ROS build artefacts" }
+doctor = { cmd = "bash scripts/doctor.sh", description = "Check the environment, the arm service and the cameras" }
+
+# Manual (实验手册) section 6, terminal 1: bridge to the arm service + MoveIt/RViz.
+bringup = { cmd = "bash scripts/check_arm.sh && roslaunch launch/real_control.launch use_grpc:=true url:=$ARM_URL port:=$ARM_PORT", description = "Connect to airbot_server and start MoveIt/RViz" }
+# Section 6-8, terminal 2: keyboard teleoperation.
+keyboard = { cmd = "rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/real.json", description = "Keyboard teleoperation" }
+# Section 8.2, terminal 3: e.g. `pixi run hsv-finder -na -d 2`.
+hsv-finder = { cmd = "python demo/hsv_finder.py", description = "Tune HSV thresholds with sliders" }
+# Sections 8.3 and 9, terminal 3: e.g. `pixi run vision -t pi0 -vd 2`, `pixi run vision -vd 2`.
+vision = { cmd = "python Best_Contour.py -cfg ./configs/vision/real.json", description = "Block detection" }
+# Section 9, terminal 2: e.g. `pixi run pick-place adjust 0`, `pixi run pick-place go 20.25 40.51`.
+pick-place = { cmd = "bash run_pick_place.sh", description = "Pick-and-place control (adjust / go)" }
+record = { cmd = "python data_driven/record_data.py", description = "Record a demonstration episode" }
