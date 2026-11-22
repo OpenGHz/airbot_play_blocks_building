@@ -8,7 +8,7 @@ import math,time
 from threading import Thread,Event
 from copy import deepcopy
 
-from airbot_play_control.control import RoboticArmAgent, CoordinateTools, ChooseGripper
+from easy_arm_control.control import RoboticArmAgent, CoordinateTools, ChooseGripper
 
 
 class VisualPerception(object):
