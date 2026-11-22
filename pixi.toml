@@ -49,7 +49,7 @@ py-opencv = "*"
 
 [pypi-dependencies]
 robotics-tools = "==1.0.2"
-std-vision = "==1.0.4"
+std-vision = "==1.0.5"
 easy-arm-control = { path = "ros_ws/src/easy_arm_control/pkgs", editable = true }
 # gRPC client of the arm service (airbot_server); not published on PyPI.
 airbot-py = { path = "vendor/airbot_py-5.1.6-py3-none-any.whl" }

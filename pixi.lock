@@ -532,11 +532,11 @@ environments:
       - conda: https://conda.anaconda.org/robostack-noetic/linux-64/ros-noetic-xmlrpcpp-1.17.4-np2py312hbad1cee_24.conda
       - pypi: ./ros_ws/src/easy_arm_control/pkgs
       - pypi: ./vendor/airbot_py-5.1.6-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/19/9b/08e30f9762d76a1713f5a79eb645f76f0946c36ef32f756e3f76d35e47b3/std_vision-1.0.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/61/a3/00203767544b597a9e3c57b29a84967b3230f00bdd9aa6a52a73187043b4/typeguard-4.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ae/50/64c94cfc4db8d9ed07da71427a936b5a2bd2b27c66269b42fbda82c7c7a4/grpcio-1.70.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/d2/26/5176946cdb98189b13f67defc6283860b731a34211a2076055a1bc456f9b/robotics_tools-1.0.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/e2/6e/84d329334de423c996ed44fb543c105b67e529238aa9a328dc7845af0141/std_vision-1.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e2/fb/8442f386fa71056abe7ebbc153eaac8cbe32875ed659a641ca526ab9f341/grpcio_tools-1.70.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/e3/dd/cadd6ec43069247d91f6345fa7a0d2858bef6af366dbd7ba8f05d2c77d3b/protobuf-5.29.6-cp38-abi3-manylinux2014_x86_64.whl
 packages:
@@ -9735,15 +9735,6 @@ packages:
   - shellcheck-py==0.9.0.2 ; extra == 'test'
   - wheel==0.45.1 ; extra == 'test'
   requires_python: '>=3.8.1'
-- pypi: https://files.pythonhosted.org/packages/19/9b/08e30f9762d76a1713f5a79eb645f76f0946c36ef32f756e3f76d35e47b3/std_vision-1.0.4-py3-none-any.whl
-  name: std-vision
-  version: 1.0.4
-  sha256: 97d1a55ff719878264dabbdecd0c24e9ae7bda0ecad4017b64c7467cf1941da1
-  requires_dist:
-  - numpy
-  - matplotlib
-  - opencv-python
-  requires_python: '>=3.6'
 - pypi: https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl
   name: typing-extensions
   version: 4.16.0
@@ -9779,6 +9770,15 @@ packages:
   - numpy>=1.19.5
   - scipy
   - matplotlib
+  requires_python: '>=3.6'
+- pypi: https://files.pythonhosted.org/packages/e2/6e/84d329334de423c996ed44fb543c105b67e529238aa9a328dc7845af0141/std_vision-1.0.5-py3-none-any.whl
+  name: std-vision
+  version: 1.0.5
+  sha256: f13761a292406dc209a4e4135fb1209e14a944a9e1178159c8bbd43dcb5c4a5b
+  requires_dist:
+  - numpy
+  - matplotlib
+  - opencv-python
   requires_python: '>=3.6'
 - pypi: https://files.pythonhosted.org/packages/e2/fb/8442f386fa71056abe7ebbc153eaac8cbe32875ed659a641ca526ab9f341/grpcio_tools-1.70.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
   name: grpcio-tools
