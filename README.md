@@ -39,8 +39,6 @@ pixi run doctor
 
 首次 `pixi run build` 会下载约 500 个包（数分钟，取决于网络），之后再运行只做增量编译。所有内容都装在仓库内的 `.pixi/` 和 `ros_ws/` 中，不修改 `~/.bashrc`，也不需要 `sudo`。删除仓库目录即完全卸载。
 
-> **子模块 `easy-arm-control` 目前是私有仓库**，没有访问权限时 `git clone --recursive` 会拉取失败，安装无法完成。仓库公开后即可正常安装。
-
 已经 clone 但没有拉取子模块时：
 
 ```bash
