@@ -81,7 +81,6 @@ record = { cmd = "python data_driven/record_data.py", description = "Record a de
 sim = { cmd = "python -m sim.world", description = "Run the simulated arm, gripper and cubes (MuJoCo window; --headless, --no-camera, --seed N)" }
 sim-ctl = { cmd = "python -m sim.ctl", description = "The operator's hands in the simulation: sim-ctl cube to-gripper|put-under|nudge|take|respawn|reset|list" }
 sim-slip-test = { cmd = "python -m sim.slip_test", description = "Check that a grasped cube does not slip out of the gripper" }
-sim-debug-view = { cmd = "python -m sim.debug_view", description = "Wrist camera with what the vision picks drawn on it; also saved to runs/sim/debug_*.mp4" }
 sim-record = { cmd = "python -m sim.record", description = "Record the running simulation (whole arm + wrist camera inset) to runs/sim/record_*.mp4 until Ctrl+C (--snapshot PNG to choose the view)" }
 sim-calib-vision = { cmd = "python -m sim.calib_vision", description = "Compute EXPECT_X / EXPECT_PICK_REF / EXPECT_PLACE_REF for configs/vision/sim.yaml (--apply)" }
 # Scene analysis: look at it, render it, pick the tower spot and table height.

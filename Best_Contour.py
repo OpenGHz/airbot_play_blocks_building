@@ -1,16 +1,91 @@
 import rospy
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import TransformStamped
-import math, time, argparse
+import math, time, argparse, atexit, os, threading
 from typing import Union
 from numpy import ndarray
+import cv2
+import numpy as np
 
 from robot_tools import recorder, pather, transformations
 from std_vision.video import StdVideo, Types
 from std_vision.contour import Contour
-from std_vision.draw import Draw
 from std_vision.ros_tools import RosTools
 from std_vision.geometry import Geometry
+
+
+# Output 窗口上叠加的识别过程（BGR）。"target" 指视觉在这一帧选中、正在对准的物块，和抓取（pick）阶段无关
+OV_FILTERED = (150, 150, 150)  # 灰：被面积或长宽比筛掉的轮廓
+OV_CANDIDATE = (0, 220, 255)   # 黄：通过筛选的候选轮廓
+OV_TARGET = (0, 0, 255)        # 红：选中的目标（候选里离参考点最近的）
+OV_REF = (255, 0, 255)         # 品红：参考点 / Place 阶段上边沿的期望位置
+OV_EDGE = (255, 255, 0)        # 青：Place 阶段塔顶物块上边沿的当前位置
+
+
+def _text(img, s, org, color=(255, 255, 255), scale=0.5):
+    """带黑色描边的文字，在任何背景上都看得清"""
+    cv2.putText(img, s, org, cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(img, s, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, 1, cv2.LINE_AA)
+
+
+def draw_overlay(frame, attention, binary=None, area_limit=None, ratio_max=None, ref=None,
+                 target=None, keep=None, edge_ref=None):
+    """
+    在 Output 窗口的图像上画出这一帧的识别过程（原地修改 frame）。
+      attention  /vision_attention：pick0 / pick1 / place0 / place1 / pause
+      binary     查找轮廓用的二值图（已裁剪）
+      ref        参考点 (x, y)：候选轮廓里离它最近的成为目标；x 方向偏差相对它计算
+      target     None，或 dict(box=四个顶点, offset=(x, y, 角度), edge=上边沿 y 或 None)
+      keep       Place 阶段参与识别的区域 (x0, x1, y1)，区域外调暗
+      edge_ref   Place 阶段塔顶物块上边沿的期望位置 EXPECT_PLACE_REF
+    """
+    h, w = frame.shape[:2]
+    if attention == 'pause':
+        _text(frame, 'PAUSED: vision off', (10, 24), scale=0.6)
+        return
+    place = attention.startswith('place')
+    color = 1 if attention in ('pick0', 'place1') else 2
+    if keep is not None:
+        x0, x1, y1 = keep
+        ignored = np.ones((h, w), bool)
+        ignored[:y1, x0:x1] = False
+        frame[ignored] = (frame[ignored] * 0.35).astype(frame.dtype)
+    if binary is not None:  # 和 Contour.NFC_F 相同的筛选：轮廓面积、外接矩形面积、长宽比
+        cnts, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts:
+            a = cv2.contourArea(c)
+            _, (rw, rh), _ = cv2.minAreaRect(c)
+            ok = (area_limit[0] < a < area_limit[1] and area_limit[0] < rw * rh < area_limit[1]
+                  and rh > 0 and 1 / ratio_max < rw / rh < ratio_max)
+            col = OV_CANDIDATE if ok else OV_FILTERED
+            cv2.drawContours(frame, [c], -1, col, 1)
+            if ok or a >= area_limit[0] / 4:  # 很小的噪点不标面积
+                x, y, _, _ = cv2.boundingRect(c)
+                _text(frame, f'{a:.0f}', (x, max(12, y - 4)), col, 0.4)
+    if place and edge_ref is not None:
+        e = int(round(edge_ref))
+        cv2.line(frame, (0, e), (w, e), OV_REF, 1)
+        _text(frame, 'edge ref', (w - 75, e - 4), OV_REF, 0.4)
+    if ref is not None:
+        cv2.drawMarker(frame, (int(round(ref[0])), int(round(ref[1]))), OV_REF, cv2.MARKER_CROSS, 18, 2)
+    if target is not None:
+        box = np.int32(target['box'])
+        cv2.drawContours(frame, [box], 0, OV_TARGET, 2)
+        _text(frame, 'target', (int(box[:, 0].min()), int(box[:, 1].min()) - 6), OV_TARGET, 0.45)
+        if target.get('edge') is not None:
+            e = int(round(target['edge']))
+            cv2.line(frame, (int(box[:, 0].min()) - 10, e), (int(box[:, 0].max()) + 10, e), OV_EDGE, 2)
+        ox, oy, rot = target['offset']
+        status, status_col = f'target offset  x {ox:+.1f}  y {oy:+.1f} px  rot {rot:+.1f} deg', (255, 255, 255)
+    else:
+        status, status_col = 'no target', OV_TARGET
+    what = 'tower top' if place else 'cube to grasp'
+    _text(frame, f'{"PLACE" if place else "PICK"} stage: {what}, colour {color}', (10, 24), scale=0.6)
+    _text(frame, status, (10, 48), status_col, 0.55)
+    legend = 'grey: filtered out  yellow: candidate  red: target  magenta: reference'
+    if place:
+        legend += '  cyan: top edge'
+    _text(frame, legend, (10, h - 10), scale=0.4)
 
 
 if __name__ == '__main__':
@@ -26,6 +101,8 @@ if __name__ == '__main__':
     parser.add_argument('-vd', '--video_device', type=str, help='video device', default="/camera/color/image_raw")
     parser.add_argument('-ci', '--camera_info', type=str, help='camera info topic', default="/camera/color/camera_info")
     parser.add_argument('-rt', '--rotate_180', action='store_true', help='rotate 180 degree')
+    parser.add_argument('--record', nargs='?', const='', default=None,
+                        help='also save the Output window to a video (default runs/vision/vision_<time>.mp4)')
     args, unknown = parser.parse_known_args()
 
     sim_player_nums = rospy.get_param("/airbot_play/sim_player_nums", default=0)
@@ -103,6 +180,33 @@ if __name__ == '__main__':
         target.transform.rotation.w = tf_q[3]
         target_pub.publish(target)
 
+    # 把 Output 窗口的画面存成视频（--record）
+    video_out = {'writer': None, 'closed': False}
+    video_lock = threading.Lock()
+
+    def record(frame):
+        if args.record is None or frame is None:
+            return
+        with video_lock:
+            if video_out['closed']:
+                return
+            if video_out['writer'] is None:
+                path = args.record or time.strftime('runs/vision/vision_%Y%m%d_%H%M%S.mp4')
+                if not os.path.isabs(path):
+                    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                h, w = frame.shape[:2]
+                video_out['writer'] = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), 30, (w, h))
+                print(f'录像写入：{path}')
+            video_out['writer'].write(frame)
+
+    def close_record():
+        with video_lock:
+            video_out['closed'] = True
+            if video_out['writer'] is not None:
+                video_out['writer'].release()
+    atexit.register(close_record)
+
     # 核心图像处理函数
     def image_process(frame:Union[Image, ndarray]):
             # 根据注意力参数进行一些信息是否发送的切换
@@ -122,6 +226,8 @@ if __name__ == '__main__':
 
             # 若暂停，则直接退出函数，不进行任何图像处理和话题发布
             if vision_attention == 'pause':
+                draw_overlay(frame, 'pause')
+                record(frame)
                 StdVideo.Show('Output',frame,wait_time=1,disable=args.not_show)
                 return
 
@@ -157,7 +263,9 @@ if __name__ == '__main__':
                     binary_img = StdVideo.edge_detect(binary_img,*CannyParam[converter[args.use_real]],convert=None)
                 else: binary_img = StdVideo.edge_detect(frame,*CannyParam[converter[args.use_real]])
             # 对二值图进行轮廓检测与筛选
+            ov_keep = ov_edge = None  # Output 窗口叠加用：Place 阶段参与识别的区域、塔顶上边沿
             if 'pick' in vision_attention:  # pick模式
+                ov_area, ov_ratio = AREA_LIMIT_PICK, 3.0
                 converter = {
                     'area_limit': AREA_LIMIT_PICK, 
                     'ratio_max': {True: 3.0, False: 3.0}, 
@@ -180,6 +288,11 @@ if __name__ == '__main__':
                     x0, x1 = int(PLACE_CROP_X[0]), int(PLACE_CROP_X[1])
                     binary_img[:, :max(0, x0)] = 0
                     binary_img[:, x1:] = 0
+                ov_h, ov_w = binary_img.shape[:2]
+                ov_keep = (max(0, int(PLACE_CROP_X[0])) if PLACE_CROP_X is not None else 0,
+                           int(PLACE_CROP_X[1]) if PLACE_CROP_X is not None else ov_w,
+                           423 if args.use_real else ov_h)
+                ov_area, ov_ratio = AREA_LIMIT_PLACE, 5.5
                 # 轮廓识别
                 converter = {
                     'area_limit': AREA_LIMIT_PLACE, 
@@ -197,6 +310,7 @@ if __name__ == '__main__':
                         reference_y = expect_place_y  # 参考的标准的上边沿的位置（参考值的偏差直接影响了所有物块放置的偏差（即每次放置的系统偏差），是累计偏差的根源，因此一定要尽可能精确确定，并且在放置时可以采用上下轮换逼近的方式避免累计）
                     else: reference_y = expect_place_y
                     upper_edge = center_xy[1] - w_h[0]/2  # 注意此时减的是宽，因为宽更小，符合实际情况
+                    ov_edge = upper_edge
                     if args.negative:
                         bias_xyz[0] *= -1  # x方向偏差照旧，只是另一头方向要反一下
                         bias_xyz[1] = upper_edge - reference_y # 将y方向的偏差改为物块上边沿的位置(物块在)
@@ -207,8 +321,6 @@ if __name__ == '__main__':
             # 若成功筛选出目标
             if cnt is not None:
                 bias_xyz[2] = 0  # 不考虑z方向偏差
-                Contour.draw(frame,[box_int])
-                Draw.basic_draw(frame,(640,360),3,(0,0,255),-1,tips='circle')  # 绘制图像中心点（-1表示填充）
                 # 角度按45度为界进行正逆转动的转换，保证优弧
                 # minAreaRect returns (0, 90] in OpenCV 4.5.1 ~ 4.x and [-90, 0) in others (e.g. 4.13); a square is the same every 90 deg
                 rotation_angle %= 90
@@ -219,7 +331,11 @@ if __name__ == '__main__':
                     loginfo("偏差量(图像坐标系)为：x:{:.1f} y:{:.1f} r:{:.1f} ".format(bias_xyz[0],bias_xyz[1],rotation_angle))
                     loginfo(f'中心坐标为：({center_xy[0]:.1f},{center_xy[1]:.1f});w_h为：({w_h[0]:.1f},{w_h[1]:.1f})')
                     loginfo(f'上边沿为：{center_xy[1] - w_h[0]/2}')
-            # 图像展示
+            # 图像展示：叠加识别过程（候选、目标、参考点、裁剪区域），见 draw_overlay
+            target = None if cnt is None else {'box': box_int, 'offset': (bias_xyz[0], bias_xyz[1], rotation_angle), 'edge': ov_edge}
+            draw_overlay(frame, vision_attention, binary_img, ov_area, ov_ratio, (expect_x, expect_pick_y),
+                         target, ov_keep, expect_place_y)
+            record(frame)
             StdVideo.Show('Output',frame,wait_time=1,disable=args.not_show,show_fps=False)
             return frame
 

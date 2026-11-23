@@ -94,15 +94,31 @@ pixi run vision -vd 2                 # 终端 3
 |------|----------------|------|
 | `build` | `catkin build`（先执行 `configure`） | 安装环境并编译 `ros_ws/` |
 | `clean` | `catkin clean -y` | 清理编译结果 |
-| `doctor` | `scripts/doctor.sh` | 检查子模块、编译、Python 模块、图形界面、机械臂服务、相机 |
-| `bringup` | `roslaunch launch/real_control.launch use_grpc:=true url:=$ARM_URL port:=$ARM_PORT` | 先检查机械臂服务能否连接，连不上会直接提示 |
-| `keyboard` | `rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/real.yaml` | 键盘遥控 |
-| `hsv-finder` | `python demo/hsv_finder.py` | 滑动条确定 HSV 阈值 |
-| `vision` | `python Best_Contour.py -cfg ./configs/vision/real.yaml` | 物块识别 |
+| `doctor` | `scripts/doctor.sh` | 检查子模块、编译、Python 模块、图形界面、机械臂服务（或仿真进程）、相机 |
+| `bringup` | `scripts/bringup.sh` → `roslaunch launch/bringup.launch driver:=… env_type:=… url:=$ARM_URL port:=$ARM_PORT` | 先找机械臂：机械臂服务能连上时为真机（`env_type:=real`），`pixi run sim` 在运行时为仿真（`driver:=sim env_type:=sim`），两个都没有、或者同时在运行时会直接提示。`env_type` 决定后面各任务读 `configs/*/real.yaml` 还是 `sim.yaml` |
+| `keyboard` | `scripts/keyboard.sh` → `rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/<env_type>.yaml` | 键盘遥控 |
+| `hsv-finder` | `scripts/hsv_finder.sh` → `python demo/hsv_finder.py` | 滑动条确定 HSV 阈值 |
+| `vision` | `scripts/vision.sh` → `python Best_Contour.py -cfg ./configs/vision/<env_type>.yaml` | 物块识别，窗口内容见下面的"视觉窗口" |
 | `pick-place` | `bash run_pick_place.sh` | 搭积木控制（`adjust 0/1`、`go <p1> <p2>`） |
 | `record` | `python data_driven/record_data.py` | 录制演示数据 |
 
 `pixi task list` 可以随时查看。
+
+### 视觉窗口（Output）
+
+`pixi run vision` 的 Output 窗口在相机画面上画出每一帧的识别过程，真机和仿真相同。加 `--record` 同时存成视频（默认 `runs/vision/vision_<时间>.mp4`，也可以 `--record 路径`）。
+
+| 画面上的元素 | 含义 |
+|------|------|
+| 左上第 1 行 | 当前阶段：`PICK stage: cube to grasp`（抓取，对准要抓的物块）或 `PLACE stage: tower top`（放置，对准塔顶物块），以及识别的颜色（1 或 2）；暂停时为 `PAUSED` |
+| 左上第 2 行 | 选中目标时为发给控制程序的偏差（像素 x、y，角度）；没有目标时为 `no target` |
+| 灰色轮廓 | 当前颜色的轮廓，但面积（`AREA_LIMIT_*`）或长宽比不合格，不参与选择；旁边的数字是轮廓面积（像素²） |
+| 黄色轮廓 | 通过筛选的候选 |
+| 红色粗框 `target` | 选中的目标：候选里离品红十字最近的一个 |
+| 品红十字 | 参考点（`EXPECT_X`, `EXPECT_PICK_REF`）。Pick 阶段要把目标中心对到这里；两个阶段的 x 偏差都相对它计算 |
+| 品红横线 `edge ref`（Place） | 塔顶物块上边沿的期望位置 `EXPECT_PLACE_REF` |
+| 青色横线（Place） | 塔顶物块上边沿的当前位置；y 偏差 = 品红横线 − 青色横线 |
+| 调暗的区域（Place） | 不参与识别：第 423 行以下（真机和本仓库的仿真都会裁），以及 `PLACE_CROP_X` 以外的列 |
 
 ### 机械臂服务地址
 
@@ -125,7 +141,6 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 
 | 任务 | 说明 |
 |------|------|
-| `sim-debug-view` | 腕部相机画面，叠加视觉识别到的轮廓和选中的物块，同时保存到 `runs/sim/debug_*.mp4` |
 | `sim-record` | 录制整个场景（含腕部相机小窗），保存到 `runs/sim/record_*.mp4`，Ctrl+C 结束；上面的演示视频就是这样录的 |
 | `sim-ctl cube ...` | 操作仿真中的物块：`list`、`reset`、`respawn`、`take`、`to-gripper`、`put-under`、`nudge` |
 
@@ -134,13 +149,16 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 ```
 ├── pixi.toml / pixi.lock        # 环境与任务定义（lock 文件锁定所有依赖的精确版本）
 ├── airbot_play_pick_place.py    # 搭积木主控制程序（由 run_pick_place.sh 启动）
+├── airbot_play_transfer.py      # 抓取区与塔之间的转移：地面和塔加进 MoveIt 规划场景
 ├── Best_Contour.py              # 物块视觉识别
 ├── run_pick_place.sh
-├── configs/{control,vision}/real.yaml   # 控制 / 视觉参数
-├── launch/real_control.launch   # 真机启动（gRPC 桥接 + MoveIt）
+├── configs/{control,vision}/{real,sim}.yaml   # 控制 / 视觉参数（真机 / 仿真）
+├── configs/scene/               # 仿真场景（桌子、塔和抓取区的位置），只有仿真用
+├── launch/bringup.launch        # 启动桥接节点 + MoveIt（真机和仿真共用）
+├── sim/                         # MuJoCo 仿真（pixi run sim、sim-* 任务）
 ├── data_driven/                 # 演示数据录制与转换
 ├── demo -> ros_ws/src/easy_arm_control/demo
-├── scripts/                     # pixi 激活、工作空间配置、自检脚本
+├── scripts/                     # pixi 激活、工作空间配置、自检、各任务的启动脚本
 ├── vendor/                      # 不在 PyPI 上的依赖（airbot_py gRPC 客户端）
 ├── docs/commands.md             # 《实验手册》命令对照
 └── ros_ws/src/
