@@ -31,8 +31,9 @@ URDF = MODELS / "airbot_play_v3_gripper_gazebo/urdf/airbot_play_v3_gripper_gazeb
 MESH_DIR = MODELS / "airbot_play_v3_gripper/meshes"
 SCENE_DIR = REPO / "configs/scene"
 # Named scenes. "floor" (default): pick area on the floor next to the tower, the usual
-# setup since the table top is taken by other equipment; "table": pick area on the table top.
-SCENES = {"floor": "sim_floor.yaml", "table": "sim.yaml"}
+# setup since the table top is taken by other equipment; "table": pick area on the table top;
+# "tabletop": pick area and tower on the arm's own table top, the layout of configs/control/real.yaml.
+SCENES = {"floor": "sim_floor.yaml", "table": "sim.yaml", "tabletop": "sim_tabletop.yaml"}
 DEFAULT_SCENE = "floor"
 
 ARM_JOINTS = [f"joint{i}" for i in range(1, 7)]

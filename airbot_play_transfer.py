@@ -9,9 +9,10 @@ collision-checked (they have to get close to the tower top).
 Each transfer is planned segment by segment (the next segment starts where the previous
 one ends), joined into one trajectory and retimed, so it runs without stopping in between.
 
-All heights come from the control config; nothing has to be measured:
-  floor top     min(PICK_GRASP_Z, PLACE_POSITION_Z) - CUBE_HEIGHT/2 - FLOOR_MARGIN
-  tower bottom  PLACE_POSITION_Z - CUBE_HEIGHT/2, one CUBE_HEIGHT per block
+All heights come from the control config; nothing has to be measured (see
+airbot_play_rules.floor_and_tower_z): the floor top is half a cube plus FLOOR_MARGIN below
+the lower of PICK_GRASP_Z and PLACE_POSITION_Z, the tower bottom half a cube below
+PLACE_POSITION_Z, plus one CUBE_HEIGHT per block.
 The tower box is TOWER_INFLATE larger on every side and on top, to cover a leaning tower
 or a block that was not put down flat.
 """
@@ -23,7 +24,6 @@ from moveit_commander import PlanningSceneInterface
 from moveit_msgs.msg import RobotState, RobotTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
 
-FLOOR_MARGIN = 0.005  # the floor box top is this much below the lowest cube bottom the config implies
 FLOOR_HALF = 1.0  # half size of the floor (m)
 FLOOR_HOLE = 0.12  # half size of the square left open around the robot base, so the base never touches the floor box
 TOWER_INFLATE = 0.01
@@ -218,12 +218,3 @@ class Transfer:
 def _fmt(xyz) -> str:
     return "(" + ", ".join(f"{v:+.3f}" for v in xyz) + ")"
 
-
-def retreat_sign(pick_y: float, place_y: float) -> float:
-    """Direction along y from the tower towards the pick area (+1 or -1)."""
-    return 1.0 if pick_y - place_y >= 0 else -1.0
-
-
-def floor_and_tower_z(pick_grasp_z: float, place_z: float, cube: float):
-    """(floor top, tower bottom) in the base frame, from the control config (see module doc)."""
-    return min(pick_grasp_z, place_z) - cube / 2 - FLOOR_MARGIN, place_z - cube / 2

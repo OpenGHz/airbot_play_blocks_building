@@ -4,12 +4,14 @@ import rospy
 from robot_tools import transformations
 
 import numpy as np
-import math,time
+import math,time,os
 from threading import Thread,Event
 from copy import deepcopy
 
 from easy_arm_control.control import RoboticArmAgent, CoordinateTools, ChooseGripper
-from airbot_play_transfer import TowerScene, Transfer, floor_and_tower_z, retreat_sign
+from airbot_play_rules import (TrackLimit, fingers_beside_top_block, floor_and_tower_z, release_z, retreat_sign,
+                               slot_exit_targets)
+from airbot_play_transfer import TowerScene, Transfer
 
 GRIPPER_LINKS = ("link6", "left", "right")  # 抓着的物块可以接触的连杆（airbot_play URDF）
 
@@ -101,13 +103,13 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self._transit_z_min = configs.get("TRANSIT_Z_MIN")  # 抓起后横移时末端的最低高度；不设时与原来一样
         self._retreat_y = configs.get("PLACE_RETREAT_Y", 0.0)  # 松开上升后沿y侧移的距离（自动朝抓取区一侧）；0为不侧移
         # 跟踪范围限位：视觉跟踪的目标xy超出矩形时不执行这一步，防止锁定抓取区外 / 塔上的同色物块
-        self._pick_track_center = tuple(configs.get("PICK_AREA_CENTER", (configs["PICK_POSITION_X"], configs["PICK_POSITION_Y"])))
-        half = configs.get("PICK_AREA_HALF_SIZE")  # 不写时Pick阶段不限位
-        self._pick_track_half = None if half is None else tuple(half)
-        half = configs.get("PLACE_TRACK_HALF_SIZE")  # 不写时Place阶段不限位
-        self._place_track_half = None if half is None else tuple(half)
-        self._out_frames_max = int(configs.get("OUT_OF_AREA_FRAMES", 10))
-        self._out_frames = 0
+        # 半边长不写时该阶段不限位；连续 OUT_OF_AREA_FRAMES 帧超出时放弃（见 airbot_play_rules.TrackLimit）
+        frames = configs.get("OUT_OF_AREA_FRAMES", 10)
+        self._track = {
+            'pick': TrackLimit(configs.get("PICK_AREA_CENTER", (configs["PICK_POSITION_X"], configs["PICK_POSITION_Y"])),
+                               configs.get("PICK_AREA_HALF_SIZE"), frames),
+            'place': TrackLimit(self._place_xy, configs.get("PLACE_TRACK_HALF_SIZE"), frames),
+        }
         # 添加预置关节角位姿
         if configs['PICK_JOINT'] == "AUTO":
             self.preset_pose['PickJoint'] = (0,) * self.joints_num
@@ -238,6 +240,8 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             # 订阅视觉反馈
             rospy.Subscriber("/target_TF",TransformStamped,self.feedback_callback,queue_size=1)  # queue_size=1表明只接收最新数据
             self.loginfo("Subscribe to /target_TF to receive vision feedback.")
+            # 机械臂状态看门狗：桥接节点退出（真机主服务或仿真被关掉）后关节状态不再更新，此时停下并退出，不卡住
+            Thread(target=self._watch_arm_state, daemon=True).start()
             # 启动跟踪线程
             self._follow_event = Event()  # 跟踪线程的event
             Thread(target=self.__follow,daemon=True).start()
@@ -259,7 +263,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self._first_out = 0
         self._change_pick_place_state.__dict__['times'] = self.__start_base  # times参数可以用来记录叠放次数，同时也可用于确定place的高度，而其奇偶决定待抓取颜色（该参数实际记录的是从place切到pick的次数）
         self.pick_place_0_1 = self._change_pick_place_state.times % 2
-        self._place_base_z = self._place_z0 + self._cube_height * start_base
+        self._place_base_z = release_z(self._place_z0, start_base, self._cube_height)
         if self._use_scene: self._scene.set_tower(start_base)
         print(f"初始叠放物块数：{start_base}")
         if self.__pick_keyboard:
@@ -491,6 +495,23 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         finally:  # 无论成功与否都要复位，否则之后的回调全部被跳过，程序看起来卡死
             self.feedback_callback.__dict__['running'] = False
 
+    def _watch_arm_state(self, timeout: float = 2.0):
+        """ /airbot_play/joint_states 超过timeout秒没有更新：机械臂连接已断开 """
+        from sensor_msgs.msg import JointState
+        last = {'t': time.monotonic()}
+        rospy.Subscriber('/airbot_play/joint_states', JointState, lambda _: last.__setitem__('t', time.monotonic()), queue_size=1)
+        while True:  # 不用rospy.is_shutdown()/rospy.sleep()：ROS master退出后它们也可能出错
+            time.sleep(0.5)
+            if time.monotonic() - last['t'] > timeout:
+                try:  # bringup（ROS master）可能也跟着退出了
+                    rospy.set_param("/vision_attention", 'pause')
+                except Exception:
+                    pass
+                print(f'\n机械臂状态 {timeout:.0f} 秒没有更新：和机械臂（真机主服务或 pixi run sim）的连接已断开。'
+                      f'程序退出，已搭好 {self.built_count()} 块。重新启动 bringup 后再运行 pick-place。', flush=True)
+                self._fault = TaskFault('机械臂连接', '断开')  # 不再执行视觉回调里的动作
+                os._exit(2)  # 主线程可能卡在等待MoveIt执行结果，直接退出，退出码2
+
     def built_count(self) -> int:
         """ 已经放好的物块数（含start_base） """
         return self._change_pick_place_state.__dict__.get('times', 0)
@@ -566,13 +587,16 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
     def _resume_after(self, fault: TaskFault):
         """ 重试成功后继续：重新打开视觉（当前阶段的颜色） """
         self._first_out = 3
-        self._out_frames = 0
+        for t in self._track.values(): t.reset()
         self._first_pick_satisfy = self._first_place_satisfy = False
         rospy.set_param("/vision_attention", self._pick_place_stage + str(self.pick_place_0_1))
         print('继续搭建')
 
     def _go_home_and_exit(self):
-        """ 先竖直上升离开塔顶（直线能走多少走多少），再在规划场景（含塔）里回Home；规划不出时停下提示，不硬走 """
+        """
+            先竖直上升离开塔顶（直线能走多少走多少），再在规划场景（含塔）里回Home；规划不出时停下提示，不硬走。
+            到上限时竖直上升往往走不完，张开的手指还在塔顶物块两侧：这时先沿手指间的空隙水平移出，再规划。
+        """
         rospy.set_param("/vision_attention", 'pause')
         n = self.built_count()
         try:
@@ -585,10 +609,26 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
                 rise = t.line(start, [xyz[0], xyz[1], xyz[2] + self._cube_height + 0.01], q, '竖直上升', partial=True)
                 if rise is not None: segs.append(rise)
                 end = t.end(segs[-1]) if segs else start
-                # 竖直上升可能没走完，手指（或手里的物块）还在塔顶旁边：塔的碰撞体只到它们下方3mm，起点不算碰撞
-                end_z = self.change_joints_to_pose(end)[0][2]
-                lowest = end_z - (0.015 if self._scene.holding else 0.005)  # 物块底面 / 指尖相对末端点的高度（URDF）
-                self._scene.set_tower(n, max_top=lowest - 0.003)
+                end_xyz = self.change_joints_to_pose(end)[0]
+                lowest = end_xyz[2] - (0.015 if self._scene.holding else 0.005)  # 物块底面 / 指尖相对末端点的高度（URDF）
+                tower_top = self._scene.tower_bottom_z + n * self._cube_height
+                if n > 0 and fingers_beside_top_block(end_xyz, self._scene.tower_xy, lowest, tower_top):
+                    # 塔顶物块在两根手指之间：只有沿手指间的空隙水平移出才碰不到它（先试朝底座的一端）
+                    slide = None
+                    for target in slot_exit_targets(end_xyz, q):
+                        try:
+                            slide = t.line(end, target, q, '沿手指间的空隙水平移出')
+                            break
+                        except Exception:  # 这一端够不到，试另一端
+                            continue
+                    if slide is None:
+                        raise RuntimeError('手指还在塔顶物块两侧，沿手指间的空隙水平移出也够不到，为免碰倒塔不再移动')
+                    segs.append(slide)
+                    end = t.end(slide)
+                    self._scene.set_tower(n)  # 手指已在塔的侧面，塔按完整的碰撞体（四周和顶部放大）参与规划
+                else:
+                    # 手指（或手里的物块）在塔顶上方：塔顶的放大部分只保留到它们下方3mm，起点不算碰撞
+                    self._scene.set_tower(n, max_top=max(lowest - 0.003, tower_top))
                 segs.append(t.plan_to_joints(end, self.preset_pose['Home'], '回 Home'))
                 t.run(start, segs, vel=0.3, acc=0.3)
             else:
@@ -692,15 +732,13 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             # 反馈值转换为目标值
             self.convert_feedback_to_target()
             # 跟踪范围限位：超出时这一步不执行，目标恢复为上一次的值（相当于这一帧没识别到）
-            if not self._target_in_track_area():
+            # 跟踪目标的xy在基座坐标系，由关节编码器和URDF正解决定，和相机无关
+            verdict = self._track[self._pick_place_stage].check(self.target_pose_position)
+            if verdict != 'ok':
                 self.set_target_pose([0, 0, 0], [0, 0, 0], target_base='last')
-                self._out_frames += 1
-                if self._out_frames >= self._out_frames_max:
-                    self._out_frames = 0
-                    self._on_out_of_area()
+                if verdict == 'out': self._on_out_of_area()
                 self._follow_event.clear()
                 continue
-            self._out_frames = 0
             # 优化控制与执行
             self._motion_optimization()
             self.go_to(self.start_base_mode,self.follow_wait,self.approximate,return_enable=True)
@@ -708,25 +746,15 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             # clear，从而可以刷新pose
             self._follow_event.clear()
 
-    def _target_in_track_area(self) -> bool:
-        """ 跟踪目标的xy是否在当前阶段的矩形内（基座坐标系，由关节编码器和URDF正解决定，和相机无关） """
-        x, y = self.target_pose_position[:2]
-        if self._pick_place_stage == 'pick':
-            if self._pick_track_half is None: return True
-            (cx, cy), (hx, hy) = self._pick_track_center, self._pick_track_half
-        else:
-            if self._place_track_half is None: return True
-            (cx, cy), (hx, hy) = self._place_xy, self._place_track_half
-        return abs(x - cx) <= hx and abs(y - cy) <= hy
-
     def _on_out_of_area(self):
         """ 连续OUT_OF_AREA_FRAMES帧超出跟踪范围 """
         color = f'第 {self.pick_place_0_1 + 1} 种颜色'
         if self._pick_place_stage == 'pick':
             self._raise_fault(TaskFault('抓取阶段跟踪', f'抓取区里没有可抓的{color}物块（或者识别到了抓取区外的物块）', kind='pick_empty'))
         else:
-            self._raise_fault(TaskFault('放置阶段跟踪', f'跟踪目标连续 {self._out_frames_max} 帧超出塔周围的跟踪范围'
-                                        f'（中心 {self._fmt_xyz(self._place_xy)}，半边长 {self._fmt_xyz(self._place_track_half)}）'))
+            t = self._track['place']
+            self._raise_fault(TaskFault('放置阶段跟踪', f'跟踪目标连续 {t.frames} 帧超出塔周围的跟踪范围'
+                                        f'（中心 {self._fmt_xyz(t.center)}，半边长 {self._fmt_xyz(t.half)}）'))
 
     def _Pick_and_Go(self,start_xy=5,start_yaw=0.0175*1,stable=False,pick_keyboard=False,place_mode=0):
         """
@@ -808,7 +836,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             else: self.go_to_place_pose(use_tof=self.use_tof, place_mode=place_mode)
         elif pick_or_place=='pick':  # 进入pick位置开始新一轮pp
             self._change_pick_place_state.__dict__['times'] += 1  # 每次change到pick，意味着新一轮开始了，此时将次数进行累加
-            self._place_base_z = self._place_z0 + self._cube_height * self._change_pick_place_state.times
+            self._place_base_z = release_z(self._place_z0, self._change_pick_place_state.times, self._cube_height)
             self.pick_place_0_1 = self._change_pick_place_state.times % 2 # 刷新01状态
             self.go_to_pick_pose(sleep_time=2,from_place=True,use_name=True)  # 移动到pick区域
             # # 开启无反馈检测线程

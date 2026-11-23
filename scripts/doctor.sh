@@ -53,11 +53,11 @@ else
     warn "没有图形会话（DISPLAY 未设置），RViz 和视觉窗口无法显示"
 fi
 
-echo "机械臂主服务"
+echo "机械臂（真机主服务或仿真）"
 if out=$(bash scripts/check_arm.sh 2>&1); then
     ok "$out"
-else
-    warn "${ARM_URL:-localhost}:${ARM_PORT:-50051} 无法连接（运行 bringup 前需先在机械臂容器中启动 airbot_server）"
+else  # detect_arm.py explains what it tried and how to start the service or the simulation
+    while IFS= read -r line; do [ -n "$line" ] && warn "$line"; done <<<"$out"
 fi
 
 echo "相机"

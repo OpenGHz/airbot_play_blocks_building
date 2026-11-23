@@ -88,6 +88,12 @@ pixi run vision -vd 2                 # 终端 3
 
 `pixi run <任务>` 后面的参数会原样传给对应的命令。《实验手册》原命令与新命令的逐条对照见 [docs/commands.md](docs/commands.md)。
 
+### 动作失败或抓取区空了
+
+- **动作失败**（最常见的是搭到机械臂够不到的高度，放好最后一块后竖直上升够不到）：机械臂停在原地，终端打印哪个动作失败、当前位置和已搭的块数。按回车：先竖直离开塔顶，再绕开塔回 Home，打印"共搭了 N 块"后退出；输入 `r`：重试失败的动作。
+- **抓取区没有可抓的物块**（设置了跟踪范围 `PICK_AREA_HALF_SIZE` 时）：机械臂回到扫描位姿，补充物块后按回车继续，输入 `q` 回 Home 并退出。
+- 塔和地面在 MoveIt 规划场景里（RViz 里可以看到），抓取区和塔之间的移动自动绕开塔，塔每放一层更新一次。
+
 ### 任务列表
 
 | 任务 | 实际执行的命令 | 说明 |
@@ -128,6 +134,29 @@ pixi run vision -vd 2                 # 终端 3
 ARM_URL=192.168.1.10 ARM_PORT=50051 pixi run bringup
 ```
 
+## 地面搭塔
+
+桌面上通常放着其他设备，积木塔和抓取区可以都放在桌外的地面上：机械臂装在桌沿、正对桌外，塔和抓取区在它前方的地面上。这样能用上机械臂从最低到最高的整个可达范围，比放在桌面上能多搭很多层。仿真的默认场景就是这种布局（`configs/scene/sim_floor.yaml`，见[仿真](#仿真)），可以先在仿真里跑一遍。
+
+**摆放**
+
+- 抓取区放在扫描位姿的前方：扫描位姿下腕部相机只看得到夹爪前方的地面。
+- 抓取区的物块离塔至少约 13 cm（夹爪张开时半宽约 7.5 cm），物块之间留出夹爪张开的空间。
+- 机械臂底座后方（回零点要经过）不要放东西。
+
+**记录位置**：和桌面上一样，按手册 §7 用 `pixi run keyboard` 把夹爪移到位、按 `=` 读数，填进 `configs/control/real.yaml`。读到的都是基座坐标系里地面上方的值，**不需要量桌高**。
+
+- `PICK_POSITION_*`、`PICK_GRASP_Z`：抓取区的扫描位姿和下抓高度。
+- `PLACE_POSITION_Z`：第一块的松开高度。地面往往不平，塔下面和抓取区可能差几毫米，这时在放置点把夹爪降到地面上的物块处单独记下；之后每一层都在它上面加 `CUBE_HEIGHT`。
+
+**可选项**（`real.yaml` 里以注释列出，默认不启用）：
+
+| 键 | 作用 |
+|----|------|
+| `TRANSIT_Z_MIN` | 抓起后横移时末端的最低高度。地面搭塔建议设为 `PICK_GRASP_Z + CUBE_HEIGHT + 0.01`，手里的物块先越过抓取区的其他物块 |
+| `PICK_AREA_HALF_SIZE`、`PLACE_TRACK_HALF_SIZE` | 跟踪范围：视觉跟踪时末端只能在抓取区 / 塔周围的矩形内，防止锁定抓取区外或塔上的同色物块。半边长取"物块分布范围的一半 + 约 3 cm"；抓取区不以扫描点为中心时再设 `PICK_AREA_CENTER` |
+| `PLACE_RETREAT_Y` | 放好、竖直上升后沿 y 侧移的距离，方向自动朝抓取区一侧。不设时不侧移，只靠规划场景绕开塔 |
+
 ## 仿真
 
 用 MuJoCo 仿真代替机械臂容器，其他终端的命令和真机相同。`bringup` 会自动发现仿真中的机械臂，各程序改用 `configs/*/sim.yaml`；抓取区的物块被抓完后会自动重新摆放。
@@ -143,6 +172,15 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 |------|------|
 | `sim-record` | 录制整个场景（含腕部相机小窗），保存到 `runs/sim/record_*.mp4`，Ctrl+C 结束；上面的演示视频就是这样录的 |
 | `sim-ctl cube ...` | 操作仿真中的物块：`list`、`reset`、`respawn`、`take`、`to-gripper`、`put-under`、`nudge` |
+| `sim-vision-check` | 在渲染图上跑视觉识别，检查抓取区的物块不会连成一片、各阶段锁定的都是正确的物块。改了场景、光照或 `configs/vision/sim.yaml` 后运行 |
+| `sim --scene tabletop` | 和 `real.yaml` 一致的布局（抓取区和塔都在机械臂所在的桌面上），用来复现真机的高度上限 |
+
+### 测试
+
+| 任务 | 说明 |
+|------|------|
+| `test` | 单元测试和机械臂驱动的契约测试（仿真驱动连不开窗口的仿真，`airbot_py` 驱动连假的 `airbot_server`），不需要 ROS。GitHub Actions 上也跑这一项 |
+| `test-e2e <场景>` | 在仿真里跑完整流程（独立的 ROS master，不影响正在运行的程序），日志和结果在 `runs/e2e/`。场景：`floor`（地面搭 6 块）、`limit`（真机布局搭到上限，按回车回 Home）、`baseline`（改动前的程序，应在第 7 块后卡住）、`kill-sim`（中途关掉仿真）、`golden`（改动前后发给 MoveIt 的运动目标对比） |
 
 ## 目录结构
 
@@ -150,12 +188,14 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 ├── pixi.toml / pixi.lock        # 环境与任务定义（lock 文件锁定所有依赖的精确版本）
 ├── airbot_play_pick_place.py    # 搭积木主控制程序（由 run_pick_place.sh 启动）
 ├── airbot_play_transfer.py      # 抓取区与塔之间的转移：地面和塔加进 MoveIt 规划场景
+├── airbot_play_rules.py         # 各层高度、跟踪范围等不依赖 ROS 的规则（单元测试覆盖）
 ├── Best_Contour.py              # 物块视觉识别
 ├── run_pick_place.sh
 ├── configs/{control,vision}/{real,sim}.yaml   # 控制 / 视觉参数（真机 / 仿真）
 ├── configs/scene/               # 仿真场景（桌子、塔和抓取区的位置），只有仿真用
 ├── launch/bringup.launch        # 启动桥接节点 + MoveIt（真机和仿真共用）
 ├── sim/                         # MuJoCo 仿真（pixi run sim、sim-* 任务）
+├── tests/                       # pixi run test；tests/e2e/ 是 pixi run test-e2e
 ├── data_driven/                 # 演示数据录制与转换
 ├── demo -> ros_ws/src/easy_arm_control/demo
 ├── scripts/                     # pixi 激活、工作空间配置、自检、各任务的启动脚本

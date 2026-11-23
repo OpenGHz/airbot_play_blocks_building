@@ -1,0 +1,108 @@
+"""The task's pure rules: layer heights, retreat direction, planning-scene heights, tracking limit."""
+
+import math
+
+import pytest
+
+from airbot_play_rules import (TrackLimit, fingers_beside_top_block, floor_and_tower_z, release_z, retreat_sign,
+                               slot_axis, slot_exit_targets)
+
+H = 0.025  # CUBE_HEIGHT
+
+
+def test_release_height_with_the_default_place_height_is_unchanged():
+    # PLACE_POSITION_Z: PICK_GRASP_Z (every shipped config): same heights as the old code, grasp + k * h.
+    grasp = 0.015
+    for k in range(30):
+        assert release_z(grasp, k, H) == pytest.approx(grasp + k * H)
+
+
+def test_release_height_follows_place_height_on_every_layer():
+    # The old code used PLACE_POSITION_Z for the first block only and PICK_GRASP_Z after that.
+    grasp, place = 0.015, 0.011
+    assert release_z(place, 0, H) == pytest.approx(place)
+    assert release_z(place, 4, H) == pytest.approx(place + 4 * H)
+    assert release_z(place, 4, H) != pytest.approx(grasp + 4 * H)
+
+
+@pytest.mark.parametrize("pick_y, place_y, sign", [
+    (0.0, 0.2145, -1.0),   # configs/control/real.yaml: tower to the left, back off to -y like the old fixed shift
+    (0.0, -0.2121, 1.0),   # configs/control/sim.yaml: tower to the right
+    (0.1, 0.1, 1.0),
+])
+def test_retreat_goes_towards_the_pick_area(pick_y, place_y, sign):
+    assert retreat_sign(pick_y, place_y) == sign
+
+
+def test_floor_and_tower_heights_come_from_the_config():
+    floor, tower = floor_and_tower_z(-0.480, -0.480, H)  # sim.yaml
+    assert floor == pytest.approx(-0.4975)
+    assert tower == pytest.approx(-0.4925)
+    # The floor goes under the lower of the grasp and release heights.
+    floor, tower = floor_and_tower_z(0.015, 0.010, H)
+    assert floor == pytest.approx(0.010 - H / 2 - 0.005)
+    assert tower == pytest.approx(0.010 - H / 2)
+
+
+def test_no_track_limit_without_a_half_size():
+    t = TrackLimit((0.25, 0.0), None, frames=3)
+    assert all(t.check((x, 5.0)) == "ok" for x in (-9.0, 0.0, 9.0))
+
+
+def test_track_limit_rectangle_includes_its_border():
+    t = TrackLimit((0.29, 0.015), (0.065, 0.105))
+    assert t.inside((0.29, 0.015))
+    assert t.inside((0.29 + 0.065, 0.015 - 0.105))
+    assert not t.inside((0.29 + 0.0651, 0.015))
+    assert not t.inside((0.29, 0.015 + 0.1051))
+
+
+def test_track_limit_skips_then_gives_up_after_consecutive_frames():
+    t = TrackLimit((0.0, 0.0), (0.02, 0.02), frames=3)
+    out = (0.1, 0.0)
+    assert [t.check(out) for _ in range(3)] == ["skip", "skip", "out"]
+    assert t.check(out) == "skip"  # the counter starts again
+
+
+def test_track_limit_counts_only_consecutive_frames():
+    t = TrackLimit((0.0, 0.0), (0.02, 0.02), frames=3)
+    out, inside = (0.1, 0.0), (0.0, 0.0)
+    assert [t.check(p) for p in (out, out, inside, out, out)] == ["skip", "skip", "ok", "skip", "skip"]
+    t.reset()
+    assert [t.check(out) for _ in range(3)] == ["skip", "skip", "out"]
+
+
+def _quat_down(yaw):
+    """custom_end_link pointing down (rpy 0, pi/2, yaw), as x, y, z, w."""
+    from robot_tools import transformations
+
+    return list(transformations.quaternion_from_euler(0, math.pi / 2, yaw))
+
+
+@pytest.mark.parametrize("yaw", [0.0, 0.4, -1.2])
+def test_slot_axis_is_perpendicular_to_the_finger_opening(yaw):
+    import numpy as np
+    from robot_tools import transformations
+
+    q = _quat_down(yaw)
+    ux, uy = slot_axis(q)
+    r = transformations.quaternion_matrix(q)[:3, :3]
+    opening = r[:, 1]  # custom_end_link y: the fingers open along it
+    approach = r[:, 0]  # custom_end_link x: down
+    assert approach[2] == pytest.approx(-1.0, abs=1e-6)
+    assert np.dot([ux, uy, 0.0], opening) == pytest.approx(0.0, abs=1e-6)
+    assert math.hypot(ux, uy) == pytest.approx(1.0)
+
+
+def test_slot_exit_tries_the_end_closer_to_the_base_first():
+    first, second = slot_exit_targets([0.2734, 0.2145, 0.178], _quat_down(0.0), 0.06)
+    assert math.hypot(*first[:2]) < math.hypot(*second[:2])
+    assert first[2] == second[2] == 0.178  # a horizontal slide
+    assert math.dist(first, second) == pytest.approx(0.12)
+
+
+def test_fingers_beside_top_block():
+    tower, top = (0.2734, 0.2145), 0.1775
+    assert fingers_beside_top_block((0.282, 0.213), tower, 0.173, top)  # the limit case: tips below the top
+    assert not fingers_beside_top_block((0.282, 0.213), tower, 0.185, top)  # risen clear of it
+    assert not fingers_beside_top_block((0.35, 0.10), tower, 0.10, top)  # low, but away from the tower
