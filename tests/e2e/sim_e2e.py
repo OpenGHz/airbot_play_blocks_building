@@ -149,7 +149,8 @@ class Monitor(threading.Thread):
         self.m, self.d, _ = scene.build_physics(cfg)
         m = self.m
         self.base = scene.base_offset(cfg)
-        self.tower_xy = np.array(cfg["TOWER_XY"])
+        self.tower_world = np.array(cfg["TOWER_XY"]) + scene.scene_offset(cfg)[:2]
+        self.tower_xy = self.tower_world - self.base[:2]  # base frame, like the end-effector samples
         self.h = control["CUBE_HEIGHT"]
         self.cubes = {m.body(f"cube_{i}").id: i for i in range(int(cfg.get("CUBE_POOL", 40)))}
         self.cube_geom = {i: m.geom(f"cube_{i}").id for i in self.cubes.values()}
@@ -218,7 +219,7 @@ class Monitor(threading.Thread):
         mid = d.xpos[self.fingers].mean(0)
         held = {i for b, i in self.cubes.items() if width < CLOSED_WIDTH and np.linalg.norm(d.xpos[b] - mid) < 0.02}
         tower = {i: b for b, i in self.cubes.items()
-                 if i not in held and np.linalg.norm(d.xpos[b][:2] - self.base[:2] - self.tower_xy) < 0.03}
+                 if i not in held and np.linalg.norm(d.xpos[b][:2] - self.tower_world) < 0.03}
         # settled blocks: no robot geom touching them
         touching = set()
         for c in d.contact[: d.ncon]:
@@ -259,7 +260,7 @@ class Monitor(threading.Thread):
             arm = list(self.robot_geoms) + [self.cube_geom[i] for i in held]
             tower_geoms = [self.cube_geom[i] for i in tower]
             best = (math.inf, None, None)
-            axis = self.tower_xy + self.base[:2]
+            axis = self.tower_world
             for g in arm:
                 if math.hypot(*(d.geom_xpos[g][:2] - axis)) - m.geom_rbound[g] > 0.15:
                     continue

@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--control", default="configs/control/real.yaml")
     args = ap.parse_args()
 
-    cfg = scene.load_config(args.scene)
+    cfg = scene.without_mount_offset(scene.load_config(args.scene))
     res = named.compute(cfg, named.load_control(args.control))
     tower = res["layers"] - 1 if args.pose == "top" else 0
     model, data = snapshot.pose_scene(cfg, res, args.pose, tower)

@@ -7,8 +7,15 @@
   sim-ctl cube respawn                      new random pick-area layout
   sim-ctl cube reset                        put every cube back (clears the tower too)
   sim-ctl cube list                         where the cubes are (base frame)
+  sim-ctl arm where                         where the arm stands on the table
+  sim-ctl arm mount --dx 0.05 [--dy ..]     slide the arm on the table (or --x / --y: offset from the
+                                            scene file's mount, m); only the arm moves, like the real one
+  sim-ctl arm save                          keep the current mount for the next `pixi run sim`
+                                            (MOUNT_OFFSET in the scene file)
 
-Cubes can also be dragged in the MuJoCo window: double-click one, then Ctrl + right-drag.
+In the MuJoCo window: double-click a cube or the arm base, then Ctrl + right drag moves it
+(with Shift: along the floor / table top) and Ctrl + left drag turns a cube. A cube you let
+go of is set down upright on whatever is under it.
 """
 
 from __future__ import annotations
@@ -33,13 +40,19 @@ def main() -> int:
     p.add_argument("--dyaw", type=float, default=0.0, help="degrees")
     for name in ("respawn", "reset", "list"):
         cube.add_parser(name)
+    arm = sub.add_parser("arm").add_subparsers(dest="cmd", required=True)
+    p = arm.add_parser("mount")
+    for name in ("x", "y", "dx", "dy"):
+        p.add_argument(f"--{name}", type=float)
+    for name in ("where", "save"):
+        arm.add_parser(name)
     args = ap.parse_args()
 
     fields = {k: v for k, v in vars(args).items() if k not in ("group", "cmd") and v is not None}
     d = MujocoDriver(rate=1)
     try:
         d.connect(2.0)
-        reply = d.request("ctl", cmd=f"cube_{args.cmd.replace('-', '_')}", args=fields)
+        reply = d.request("ctl", cmd=f"{args.group}_{args.cmd.replace('-', '_')}", args=fields)
     except DriverError as e:
         print(e, file=sys.stderr)
         return 1

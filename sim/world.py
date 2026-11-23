@@ -77,11 +77,18 @@ class PickArea:
         m = self.w.model
         d = mujoco.MjData(m)
         arm = kin.Arm(m, d, self.w.base)
-        cx, cy = self.center
-        grasp = [cx, cy, self.surface + self.s - self.w.base[2]]
-        q = arm.ik(grasp, restarts=60)
-        if q is None:
-            raise RuntimeError(f"cannot reach the pick area centre {grasp}")
+        base = self.w.base
+        z = self.surface + self.s - base[2]
+        # The shape only depends on the gripper over a grasped cube. Measure it at the area centre, or,
+        # when the arm has been moved on the table so far that it cannot reach that, where the area is
+        # from the scene file's mount.
+        for gx, gy in ((self.center[0] - base[0], self.center[1] - base[1]), tuple(self.center)):  # base frame
+            q = arm.ik([gx, gy, z], restarts=60)
+            if q is not None:
+                break
+        else:
+            raise RuntimeError(f"cannot reach the pick area centre {list(self.center)} even from the scene file's mount")
+        cx, cy = gx + base[0], gy + base[1]  # world x, y of the grasped cube
         d.qpos[arm.qadr] = q
         mujoco.mj_kinematics(m, d)
         mujoco.mj_comPos(m, d)
@@ -198,7 +205,11 @@ class World:
     def __init__(self, cfg: dict):
         self.model, self.data, self.cfg = scene.build_physics(cfg)
         m = self.model
-        self.base = scene.base_offset(cfg)
+        self.base = scene.base_offset(cfg)  # world position of the arm base frame; moves with the mount
+        self.root = m.body("base_link").id
+        self.mount = scene.mount_offset(cfg)
+        self.mount_limits = scene.mount_limits(cfg)
+        self.table_geoms = {g for g in range(m.ngeom) if m.geom(g).name.startswith(("table_top", "column_", "foot_"))}
         self.lock = threading.RLock()
         self.qadr = np.array([m.joint(j).qposadr[0] for j in scene.ARM_JOINTS])
         self.dadr = np.array([m.joint(j).dofadr[0] for j in scene.ARM_JOINTS])
@@ -249,12 +260,75 @@ class World:
         self.data.qpos[a + 3 : a + 7] = _yaw_quat(yaw)
         self.data.qvel[v : v + 6] = 0.0
 
+    def support_below(self, i: int, xy=None) -> float:
+        """World z of the highest surface under cube i's footprint (at its current x, y, or at xy)."""
+        m, d = self.model, self.data
+        s = self.cfg["CUBE_SIZE"] / 2
+        pos = self.cube_pos(i)
+        x, y = pos[:2] if xy is None else xy
+        yaw = self.cube_yaw(i)
+        c, sn = math.cos(yaw), math.sin(yaw)
+        body = m.body(f"cube_{i}").id
+        geomid = np.zeros(1, np.int32)
+        top = 0.0  # the floor
+        for u, v in ((0, 0), (0.8, 0.8), (0.8, -0.8), (-0.8, 0.8), (-0.8, -0.8)):
+            px, py = x + s * (c * u - sn * v), y + s * (sn * u + c * v)
+            start = np.array([px, py, pos[2] + s + 0.002])
+            dist = mujoco.mj_ray(m, d, start, np.array([0.0, 0.0, -1.0]), None, 1, body, geomid)
+            if dist >= 0:
+                top = max(top, start[2] - dist)
+        return top
+
+    def put_down(self, i: int) -> None:
+        """Set cube i down upright, at rest, on whatever is under it (like putting it down by hand)."""
+        s = self.cfg["CUBE_SIZE"] / 2
+        pos = self.cube_pos(i).copy()
+        yaw = self.cube_yaw(i)
+        pos[2] = self.support_below(i) + s + 0.0005
+        self.place_cube(i, pos, yaw)
+        mujoco.mj_forward(self.model, self.data)
+
     def park(self, i: int) -> None:
         x, y = scene.pool_park_xy(i)
         self.place_cube(i, (x, y, self.cfg["CUBE_SIZE"] / 2))
         self.cubes[i]["parked"] = True
 
     # --- arm --------------------------------------------------------------------
+    def set_mount(self, xy) -> tuple[np.ndarray, str]:
+        """Move the arm on the table: its base centre to xy (scene frame, relative to the scene file's
+        mount). Kept on the table top; refused when the arm would end up in the table.
+        Returns (where the base is now, why it did not get all the way: "" | "edge" | "table:<link>")."""
+        m, d = self.model, self.data
+        x0, x1, y0, y1 = self.mount_limits
+        want = np.array([float(xy[0]), float(xy[1])])
+        target = np.array([min(max(want[0], x0), x1), min(max(want[1], y0), y1)])
+        why = "" if np.allclose(target, want) else "edge"
+        old = m.body_pos[self.root].copy()
+        m.body_pos[self.root][:2] = target
+        mujoco.mj_forward(m, d)
+        hit = self._arm_in_table(0.002)
+        if hit:
+            m.body_pos[self.root] = old
+            mujoco.mj_forward(m, d)
+            return self.mount.copy(), f"table:{hit}"
+        self.mount = target
+        self.base = np.array([target[0], target[1], self.base[2]])
+        return target.copy(), why
+
+    def mount_text(self) -> str:
+        dx, dy = self.mount
+        x0, x1, y0, y1 = scene.table_rect(self.cfg)[0]
+        return (f"机械臂底座相对场景文件里的安装位置 ({dx:+.3f}, {dy:+.3f}) m；"
+                f"底座中心离桌子四边：前 {x1 - dx:.3f}，后 {dx - x0:.3f}，左 {y1 - dy:.3f}，右 {dy - y0:.3f} m")
+
+    def _arm_in_table(self, depth: float) -> str:
+        m, d = self.model, self.data
+        for c in d.contact[: d.ncon]:
+            for a, b in ((c.geom1, c.geom2), (c.geom2, c.geom1)):
+                if a in self.robot_geoms and b in self.table_geoms and c.dist < -depth:
+                    return m.body(m.geom_bodyid[a]).name
+        return ""
+
     def servo_joint(self, q) -> None:
         q = np.asarray(q, dtype=float)
         if q.shape != (6,) or not np.all(np.isfinite(q)):
@@ -292,7 +366,12 @@ class World:
         dt = m.opt.timestep
         stop = stop or threading.Event()
         t_wall0, t_sim0 = time.perf_counter(), d.time
-        next_sync = next_area = 0.0
+        next_sync = next_area = next_text = 0.0
+        hand = None
+        if viewer is not None:
+            from sim.hand import Hand
+
+            hand = Hand(self)
         home_from = None
         lag_warned = 0.0
         while True:
@@ -318,6 +397,8 @@ class World:
                 d.ctrl[self.act] = self.cmd_q
                 d.ctrl[self.grip_act] = width_to_finger_q(self.cmd_width)
                 while behind > 0 and steps < 25:
+                    if hand is not None:
+                        hand.before_step()
                     mujoco.mj_step(m, d)
                     behind -= dt
                     steps += 1
@@ -331,7 +412,14 @@ class World:
                     self.pick.update(now)
                     next_area = now + 0.05
                 if viewer is not None and now >= next_sync:
+                    with viewer.lock():  # the mouse drag the viewer's UI thread keeps in its perturbation
+                        p = viewer.perturb
+                        pert = (int(p.select), int(p.active), p.refpos.copy(), p.refquat.copy())
+                    hand.update(*pert)
                     viewer.sync()
+                    if now >= next_text:
+                        viewer.set_texts(hand.texts())
+                        next_text = now + 0.1
                     next_sync = now + 1 / 60
             if steps:
                 with self.state_cond:
@@ -349,7 +437,7 @@ class World:
             return dict(self.state)
         if op == "get_qpos":
             with self.lock:
-                return {"qpos": self.data.qpos.tolist(), "t": self.data.time}
+                return {"qpos": self.data.qpos.tolist(), "t": self.data.time, "mount": self.mount.tolist()}
         if op == "ctl":
             with self.lock:
                 return self.ctl(msg.get("cmd", ""), msg.get("args", {}))
@@ -406,14 +494,34 @@ class World:
             pos[0] += dx
             pos[1] += dy
             self.place_cube(near, pos, self.cube_yaw(near) + math.radians(float(args.get("dyaw", 0.0))))
-            return {"message": f"cube_{near} 移到 ({pos[0]:.3f}, {pos[1]:.3f})（基座坐标 {pos[0]:.3f}, {pos[1]:.3f}, {pos[2] - self.base[2]:.3f}）"}
+            b = pos - self.base
+            return {"message": f"cube_{near} 移到基座坐标 ({b[0]:.3f}, {b[1]:.3f}, {b[2]:.3f})"}
         if cmd == "cube_list":
             out = []
             for i in self.active():
-                x, y, z = self.cube_pos(i)
                 where = "抓取区" if i in self.pick.batch else ""
-                out.append({"cube": i, "color": self.cubes[i]["color"], "base_xyz": [x, y, z - self.base[2]], "where": where})
+                out.append({"cube": i, "color": self.cubes[i]["color"], "base_xyz": (self.cube_pos(i) - self.base).tolist(),
+                            "where": where})
             return {"cubes": out}
+        if cmd in ("arm_mount", "arm_where"):
+            if cmd == "arm_mount":
+                if "x" in args or "y" in args:
+                    xy = [float(args.get("x", self.mount[0])), float(args.get("y", self.mount[1]))]
+                else:
+                    xy = self.mount + [float(args.get("dx", 0.0)), float(args.get("dy", 0.0))]
+                _, why = self.set_mount(xy)
+            else:
+                why = ""
+            if why:
+                reason = "底座到桌子边了" if why == "edge" else f"机械臂的 {why.split(':', 1)[1]} 会撞到桌子"
+                why = f"（没有移到 ({xy[0]:+.3f}, {xy[1]:+.3f})：{reason}）"
+            return {"message": self.mount_text() + why, "mount": self.mount.tolist()}
+        if cmd == "arm_save":
+            from sim import config_file
+
+            path = self.cfg["_path"]
+            config_file.set_keys(path, {"MOUNT_OFFSET": [round(float(v), 4) for v in self.mount]}, after="NAME")
+            return {"message": f"安装位置 {self.mount_text()} 已写入 {path.name}（MOUNT_OFFSET），下次 pixi run sim 沿用"}
         raise ValueError(f"unknown sim-ctl command {cmd!r}")
 
 

@@ -429,7 +429,7 @@ def main():
     ap.add_argument("--apply", action="store_true", help="write the result into the scene file")
     args = ap.parse_args()
 
-    cfg = scene.load_config(args.scene)
+    cfg = scene.without_mount_offset(scene.load_config(args.scene))
     if args.mount:
         cfg["MOUNT"] = args.mount
     control = config_file.load(args.control)

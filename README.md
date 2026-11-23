@@ -168,10 +168,18 @@ pixi run vision -vd 2            # 终端 3：仿真中 -vd 2 对应虚拟腕部
 pixi run pick-place go 90 100    # 终端 2：完整运行
 ```
 
+**在 MuJoCo 窗口里动手**，和真机上随时可以做的一样（窗口左下角有提示）：
+
+| 操作 | 方法 |
+|------|------|
+| 拿起、放下物块 | 双击选中物块，按住 Ctrl 加右键拖动（加 Shift 时沿地面 / 桌面移动），Ctrl 加左键拖动转动它。松手后物块端正地放在它下面的东西上（地面、桌面或另一块物块），所以也可以手工往塔上放 |
+| 移动机械臂在桌上的安装位置 | 双击选中机械臂底座，Ctrl 加右键拖动，整台机械臂在桌面上平移（不能离开桌面；会撞到桌子时不动）。和真机一样只有机械臂动，桌子、地面上的标记和物块不动，所以 `configs/control/sim.yaml` 里记录的位置要按手册 §7 重新记录。`pixi run sim-ctl arm save` 把当前位置写进场景文件（`MOUNT_OFFSET`），下次启动沿用 |
+
 | 任务 | 说明 |
 |------|------|
 | `sim-record` | 录制整个场景（含腕部相机小窗），保存到 `runs/sim/record_*.mp4`，Ctrl+C 结束；上面的演示视频就是这样录的 |
 | `sim-ctl cube ...` | 操作仿真中的物块：`list`、`reset`、`respawn`、`take`、`to-gripper`、`put-under`、`nudge` |
+| `sim-ctl arm ...` | 机械臂的安装位置：`where`、`mount --dx 0.05`（或 `--x`/`--y`，相对场景文件里的位置，m）、`save` |
 | `sim-vision-check` | 在渲染图上跑视觉识别，检查抓取区的物块不会连成一片、各阶段锁定的都是正确的物块。改了场景、光照或 `configs/vision/sim.yaml` 后运行 |
 | `sim --scene tabletop` | 和 `real.yaml` 一致的布局（抓取区和塔都在机械臂所在的桌面上），用来复现真机的高度上限 |
 

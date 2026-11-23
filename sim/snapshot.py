@@ -91,7 +91,7 @@ def main():
     ap.add_argument("--scene", default=scene.DEFAULT_SCENE, help="floor (default), table, or a scene file")
     ap.add_argument("--control", default="configs/control/real.yaml")
     args = ap.parse_args()
-    cfg = scene.load_config(args.scene)
+    cfg = scene.without_mount_offset(scene.load_config(args.scene))
     control = named.load_control(args.control)
     res = named.compute(cfg, control)
     H, n = res["table_height"], res["layers"]

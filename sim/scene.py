@@ -9,9 +9,15 @@ Two flavours share this module:
     collision and the noslip solver so a grasped cube does not slide out.
 
 The arm comes from the same URDF that MoveIt uses, so the simulated kinematics
-match the planner exactly. World frame: the floor is z = 0. The robot base frame
-is the world frame shifted up by the table height, so every position in
-configs/scene/*.yaml and configs/control/*.yaml is in the base frame.
+match the planner exactly.
+
+Frames. World: the floor is z = 0. Scene frame: the world shifted up by the table
+height; every position in configs/scene/*.yaml (table, tower spot, pick area) is in it.
+Robot base frame: where the arm stands on the table, the scene frame shifted by
+MOUNT_OFFSET [dx, dy] (default 0, the scene file's mount); positions in
+configs/control/*.yaml are in it, like the real robot's keyboard readouts. Moving the
+arm on the table (MOUNT_OFFSET, or dragging its base in the `pixi run sim` window)
+moves only the arm: the table, the floor marks and the cubes stay where they are.
 """
 
 from __future__ import annotations
@@ -267,7 +273,8 @@ def build_spec(cfg: dict | None = None, table_height: float | None = None, physi
     h = cfg["TABLE_HEIGHT"] if table_height is None else table_height
     spec = mujoco.MjSpec.from_string(_env_xml(cfg, h, physics))
     robot = robot_spec(cfg)
-    spec.body("lift").add_frame().attach_body(robot.body("base_link"), "", "")
+    dx, dy = mount_offset(cfg)
+    spec.body("lift").add_frame(pos=[dx, dy, 0.0]).attach_body(robot.body("base_link"), "", "")
 
     # Self-collision is MoveIt's job; contacts between arm links (convex hulls of
     # the meshes overlap in the folded Home pose) would only add jitter.
@@ -376,9 +383,38 @@ def build_physics(cfg: dict | None = None):
     return model, mujoco.MjData(model), cfg
 
 
+def mount_offset(cfg: dict) -> np.ndarray:
+    """Where the arm stands on the table relative to the scene file's mount: MOUNT_OFFSET [dx, dy] (m)."""
+    dx, dy = cfg.get("MOUNT_OFFSET", (0.0, 0.0))
+    return np.array([float(dx), float(dy)])
+
+
 def base_offset(cfg: dict, table_height: float | None = None) -> np.ndarray:
-    """World position of the robot base frame."""
+    """World position of the robot base frame (base-frame point + this = world point)."""
+    dx, dy = mount_offset(cfg)
+    return np.array([dx, dy, cfg["TABLE_HEIGHT"] if table_height is None else table_height])
+
+
+def scene_offset(cfg: dict, table_height: float | None = None) -> np.ndarray:
+    """World position of the scene frame (positions in the scene file + this = world point)."""
     return np.array([0.0, 0.0, cfg["TABLE_HEIGHT"] if table_height is None else table_height])
+
+
+def mount_limits(cfg: dict) -> tuple[float, float, float, float]:
+    """(x0, x1, y0, y1) in the scene frame the arm base centre may be moved within: on the table top,
+    as close to an edge as the scene file's mount is to its edge (the base overhangs that much)."""
+    (x0, x1, y0, y1), _ = table_rect(cfg)
+    m = cfg["BASE_HALF_WIDTH"]
+    if cfg.get("MOUNT", "side") == "front":
+        m = min(m, cfg["BASE_FRONT"])  # the front mount overhangs the edge by BASE_HALF_WIDTH - BASE_FRONT
+    return x0 + m, x1 - m, y0 + m, y1 - m
+
+
+def without_mount_offset(cfg: dict) -> dict:
+    """The layout tools (sim-reach, sim-snapshot, sim-view) work with the scene file's mount."""
+    if np.any(mount_offset(cfg)):
+        print(f"[sim] 忽略场景文件里的 MOUNT_OFFSET {cfg['MOUNT_OFFSET']}：布局分析按场景文件里原来的安装位置计算")
+    return {k: v for k, v in cfg.items() if k != "MOUNT_OFFSET"}
 
 
 def finger_q_for_gap(gap: float) -> float:

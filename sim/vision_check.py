@@ -92,10 +92,11 @@ class Checker:
             mujoco.mj_resetData(self.m, self.d)
             used = {c: 0 for c in self.names}
             placed = []
-            for (x, y, yaw), c in zip(spots, colors):
+            bx, by = self.cam.base[:2]
+            for (x, y, yaw), c in zip(spots, colors):  # spots are world x, y; Cam.put takes the base frame
                 i = self.cam.cube(c, used[c])
                 used[c] += 1
-                self.cam.put(i, (x, y, self.z_floor + self.s), yaw)
+                self.cam.put(i, (x - bx, y - by, self.z_floor + self.s), yaw)
                 placed.append((i, c))
             self.cam.pose(scan, open_q)
             img, ids = self.render()
@@ -148,8 +149,8 @@ class Checker:
                     used[c] += 1
                     self.cam.put(i, (tx + off[0], ty + off[1], self.z_floor + self.s + j * h))
                     top_id = self.geom(i)
-                for x, y in corners:
-                    self.cam.put(self.cam.cube(top, used[top]), (x, y, self.z_floor + self.s))
+                for x, y in corners:  # world x, y
+                    self.cam.put(self.cam.cube(top, used[top]), (x - self.cam.base[0], y - self.cam.base[1], self.z_floor + self.s))
                     used[top] += 1
                 held = self.names[k % 2]
                 z_grasp = self.control["PICK_GRASP_Z"] + k * h + gap
