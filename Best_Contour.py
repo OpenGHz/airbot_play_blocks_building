@@ -322,7 +322,9 @@ if __name__ == '__main__':
             if cnt is not None:
                 bias_xyz[2] = 0  # 不考虑z方向偏差
                 # 角度按45度为界进行正逆转动的转换，保证优弧
-                # minAreaRect returns (0, 90] in OpenCV 4.5.1 ~ 4.x and [-90, 0) in others (e.g. 4.13); a square is the same every 90 deg
+                # minAreaRect 的角度范围随 OpenCV 版本不同：实测 4.11 为 (0, 90]，4.2 和 4.13 为 [-90, 0)。
+                # 正方形每转 90 度看起来一样，先统一到 [0, 90)，两种范围下结果相同
+                # （(0, 90] 时这一行不改变结果，即原来的行为）
                 rotation_angle %= 90
                 rotation_angle = rotation_angle - 90 if rotation_angle > 45 else rotation_angle
                 rotation_angle *= -1
