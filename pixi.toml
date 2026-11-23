@@ -46,6 +46,8 @@ pyserial = "*"
 # conda's OpenCV (Qt GUI + V4L2) also satisfies std-vision's opencv-python
 # requirement, so there is exactly one cv2 in the environment.
 py-opencv = "*"
+# --- simulation ---
+mujoco = ">=3.16.0,<4"
 
 [pypi-dependencies]
 robotics-tools = "==1.0.2"
@@ -63,14 +65,26 @@ build = { cmd = "catkin build", cwd = "ros_ws", depends-on = ["configure"], desc
 clean = { cmd = "catkin clean -y", cwd = "ros_ws", description = "Remove ROS build artefacts" }
 doctor = { cmd = "bash scripts/doctor.sh", description = "Check the environment, the arm service and the cameras" }
 
-# Manual (实验手册) section 6, terminal 1: bridge to the arm service + MoveIt/RViz.
-bringup = { cmd = "bash scripts/check_arm.sh && roslaunch launch/real_control.launch use_grpc:=true url:=$ARM_URL port:=$ARM_PORT", description = "Connect to airbot_server and start MoveIt/RViz" }
-# Section 6-8, terminal 2: keyboard teleoperation.
-keyboard = { cmd = "rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/real.json", description = "Keyboard teleoperation" }
+# Manual (实验手册) section 6, terminal 1: bridge to the arm (airbot_server, or `pixi run sim`) + MoveIt/RViz.
+bringup = { cmd = "bash scripts/bringup.sh", description = "Find the arm (real or simulated), start the bridge node and MoveIt/RViz" }
+# Section 6-8, terminal 2: keyboard teleoperation (configs/control/<env_type>.yaml).
+keyboard = { cmd = "bash scripts/keyboard.sh", description = "Keyboard teleoperation" }
 # Section 8.2, terminal 3: e.g. `pixi run hsv-finder -na -d 2`.
-hsv-finder = { cmd = "python demo/hsv_finder.py", description = "Tune HSV thresholds with sliders" }
-# Sections 8.3 and 9, terminal 3: e.g. `pixi run vision -t pi0 -vd 2`, `pixi run vision -vd 2`.
-vision = { cmd = "python Best_Contour.py -cfg ./configs/vision/real.json", description = "Block detection" }
+hsv-finder = { cmd = "bash scripts/hsv_finder.sh", description = "Tune HSV thresholds with sliders" }
+# Sections 8.3 and 9, terminal 3: e.g. `pixi run vision -t pi0 -vd 2`, `pixi run vision -vd 2` (configs/vision/<env_type>.yaml).
+vision = { cmd = "bash scripts/vision.sh", description = "Block detection" }
 # Section 9, terminal 2: e.g. `pixi run pick-place adjust 0`, `pixi run pick-place go 20.25 40.51`.
 pick-place = { cmd = "bash run_pick_place.sh", description = "Pick-and-place control (adjust / go)" }
 record = { cmd = "python data_driven/record_data.py", description = "Record a demonstration episode" }
+
+# MuJoCo simulation. Terminal 0 in the simulation: `pixi run sim` instead of airbot_server.
+sim = { cmd = "python -m sim.world", description = "Run the simulated arm, gripper and cubes (MuJoCo window; --headless, --no-camera, --seed N)" }
+sim-ctl = { cmd = "python -m sim.ctl", description = "The operator's hands in the simulation: sim-ctl cube to-gripper|put-under|nudge|take|respawn|reset|list" }
+sim-slip-test = { cmd = "python -m sim.slip_test", description = "Check that a grasped cube does not slip out of the gripper" }
+sim-debug-view = { cmd = "python -m sim.debug_view", description = "Wrist camera with what the vision picks drawn on it; also saved to runs/sim/debug_*.mp4" }
+sim-record = { cmd = "python -m sim.record", description = "Record the running simulation (whole arm + wrist camera inset) to runs/sim/record_*.mp4 until Ctrl+C (--snapshot PNG to choose the view)" }
+sim-calib-vision = { cmd = "python -m sim.calib_vision", description = "Compute EXPECT_X / EXPECT_PICK_REF / EXPECT_PLACE_REF for configs/vision/sim.yaml (--apply)" }
+# Scene analysis: look at it, render it, pick the tower spot and table height.
+sim-view = { cmd = "python -m sim.view", description = "Open the MuJoCo viewer on the simulated scene (--scene floor|table, --pose pick|floor|top|home)" }
+sim-snapshot = { cmd = "python -m sim.snapshot", description = "Render the simulated scene to runs/sim/scene_<scene>.png (--scene floor|table)" }
+sim-reach = { cmd = "python -m sim.reach", description = "Find the tower (and floor pick area) spot and starting table height (--scene floor|table, --apply)" }

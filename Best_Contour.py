@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('-ng','--negative',action='store_true',help='negative place')
     parser.add_argument('-ns','--not_show',action='store_true',help='show img or not')
     parser.add_argument('-t','--test',type=str, help='test mode: pi0 pi1 pl0 pl1',default='no')
-    parser.add_argument('-cfg','--config_path',type=str, help='config file path',default='./configs/vision/mujoco.json')
+    parser.add_argument('-cfg','--config_path',type=str, help='config file path',default='./configs/vision/sim.yaml')
     parser.add_argument('-dfv','--default_hsv',type=str, help='use default hsv config: real or isaac',default='')
     parser.add_argument('-dfr','--default_ref',type=str, help='use default ref config: real or isaac',default='')
     parser.add_argument('-vd', '--video_device', type=str, help='video device', default="/camera/color/image_raw")
@@ -50,13 +50,26 @@ if __name__ == '__main__':
         else:
             config_path = args.config_path
         if args.use_real and env_type is None:
-            config_path = config_path.replace('gazebo','real').replace('mujoco','real')
+            config_path = config_path.replace('gazebo','real').replace('mujoco','real').replace('/sim.', '/real.')
         print(f'载入配置文件路径：{config_path}')
-        # 载入配置文件
-        configs = recorder.json_process(config_path)
+        # 载入配置文件（YAML，可以写注释；.json 文件按 JSON 读）
+        if config_path.endswith('.json'):
+            configs = recorder.json_process(config_path)
+        else:
+            import yaml
+            with open(config_path) as f:
+                configs = yaml.safe_load(f) or {}
         # 颜色阈值设置
         HSV1_L,HSV1_H = configs['HSV1_L'],configs['HSV1_H']  # 第1个颜色的HSV参数的下限L和上限H
         HSV2_L,HSV2_H = configs['HSV2_L'],configs['HSV2_H']  # 第2个颜色的HSV参数的下限L和上限H
+        # Place 阶段单独的 HSV 阈值（USE_PLACE_HSV 为 "True" 时使用 HSV*_P；否则和 Pick 阶段相同）
+        if str(configs.get('USE_PLACE_HSV', 'False')).lower() == 'true':
+            HSV1_L_P,HSV1_H_P = configs['HSV1_L_P'],configs['HSV1_H_P']
+            HSV2_L_P,HSV2_H_P = configs['HSV2_L_P'],configs['HSV2_H_P']
+        else:
+            HSV1_L_P,HSV1_H_P,HSV2_L_P,HSV2_H_P = HSV1_L,HSV1_H,HSV2_L,HSV2_H
+        # Place 阶段只保留的图像列 [x0, x1]（像素），不设置时保留整幅宽度
+        PLACE_CROP_X = configs.get('PLACE_CROP_X')
         # 参考设置
         EXPECT_PICK_REF = configs['EXPECT_PICK_REF']  # 中心坐标
         EXPECT_PLACE_REF = configs['EXPECT_PLACE_REF']  # 上边沿
@@ -69,6 +82,7 @@ if __name__ == '__main__':
         converter = {True: 'Real', False: 'Sim'}
         args.default_hsv = converter[args.use_real]
         args.default_ref = converter[args.use_real]
+        PLACE_CROP_X = None
 
     # 打印一些信息
     def loginfo(msg: str):
@@ -130,11 +144,11 @@ if __name__ == '__main__':
             if ColorFilter:  # 根据奇偶次和pickplace状态选择不同的颜色
                 if vision_attention in ['pick0','place1']:  # 一轮中，pick和place利用的颜色不同
                     if vision_attention == 'place1':  # place和pick的参数可以要分开会好一些
-                        res,binary_img = StdVideo.color_filter(frame,HSV_Threshold['PurpleL'],HSV_Threshold['PurpleH'])
+                        res,binary_img = StdVideo.color_filter(frame,HSV_Threshold['PurpleL_P'],HSV_Threshold['PurpleH_P'])
                     else: res,binary_img = StdVideo.color_filter(frame,HSV_Threshold['PurpleL'],HSV_Threshold['PurpleH'])
                 else:
                     if vision_attention == 'place0':
-                        res,binary_img = StdVideo.color_filter(frame,HSV_Threshold['GreenL'],HSV_Threshold['GreenH'])
+                        res,binary_img = StdVideo.color_filter(frame,HSV_Threshold['GreenL_P'],HSV_Threshold['GreenH_P'])
                     else: res,binary_img = StdVideo.color_filter(frame,HSV_Threshold['GreenL'],HSV_Threshold['GreenH'])
             # 检测得到边缘图
             if EdgeDetect:
@@ -162,6 +176,10 @@ if __name__ == '__main__':
                     bi = StdVideo.create_empty_frame(ImageSize[:2], 0)
                     bi[:423,:] = binary_img[:423,:]
                     binary_img = bi
+                if PLACE_CROP_X is not None:  # 左右裁掉，避免识别到旁边抓取区的物块
+                    x0, x1 = int(PLACE_CROP_X[0]), int(PLACE_CROP_X[1])
+                    binary_img[:, :max(0, x0)] = 0
+                    binary_img[:, x1:] = 0
                 # 轮廓识别
                 converter = {
                     'area_limit': AREA_LIMIT_PLACE, 
@@ -192,6 +210,8 @@ if __name__ == '__main__':
                 Contour.draw(frame,[box_int])
                 Draw.basic_draw(frame,(640,360),3,(0,0,255),-1,tips='circle')  # 绘制图像中心点（-1表示填充）
                 # 角度按45度为界进行正逆转动的转换，保证优弧
+                # minAreaRect returns (0, 90] in OpenCV 4.5.1 ~ 4.x and [-90, 0) in others (e.g. 4.13); a square is the same every 90 deg
+                rotation_angle %= 90
                 rotation_angle = rotation_angle - 90 if rotation_angle > 45 else rotation_angle
                 rotation_angle *= -1
                 target_publish(bias_xyz, rotation_angle)
@@ -250,6 +270,10 @@ if __name__ == '__main__':
         HSV_Threshold['PurpleH'] = HSV1_H
         HSV_Threshold['GreenL']  = HSV2_L
         HSV_Threshold['GreenH']  = HSV2_H
+        HSV_Threshold['PurpleL_P'] = HSV1_L_P
+        HSV_Threshold['PurpleH_P'] = HSV1_H_P
+        HSV_Threshold['GreenL_P']  = HSV2_L_P
+        HSV_Threshold['GreenH_P']  = HSV2_H_P
     else:
         if default_hsv == 'real':
             HSV_Threshold['PurpleL'] = HSV_Color['PurpleLR']
@@ -261,6 +285,8 @@ if __name__ == '__main__':
             HSV_Threshold['PurpleH'] = HSV_Color['PurpleHS']
             HSV_Threshold['GreenL']  = HSV_Color['GreenLS']
             HSV_Threshold['GreenH']  = HSV_Color['GreenHS']
+    for _k in ('PurpleL', 'PurpleH', 'GreenL', 'GreenH'):
+        HSV_Threshold.setdefault(_k + '_P', HSV_Threshold.get(_k))
 
     # 算法相关
     CannyParam = {'Sim':[210,240,5,True],'Real':[0,0,0,False]}

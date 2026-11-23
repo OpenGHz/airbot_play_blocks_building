@@ -1,0 +1,45 @@
+# MuJoCo 仿真场景：抓取区在桌面上（"table"）。sim/scene.py 读取。
+# 长度单位 m，位置都在机械臂基座坐标系（x 向前，y 向左，z 向上；桌面是 z = 0）。
+NAME: table
+
+TABLE_HEIGHT: 0.495               # 桌面离地高度；pixi run sim-reach --apply 写入
+TABLE_HEIGHT_RANGE: [0.40, 1.20]  # sim-reach 搜索的桌高范围
+MOUNT: front                      # 机械臂装在桌子的长边（front）或短边（side）
+TABLE_DEPTH: 0.60
+TABLE_WIDTH: 1.20
+BASE_HALF_WIDTH: 0.058            # 机械臂底座半宽
+BASE_FRONT: 0.05                  # 底座中心到桌沿的距离
+SIDE_MOUNT_BACK: 0.20             # 短边安装时底座离桌角的距离
+TABLE_THICKNESS: 0.025
+COLUMN_SIZE: [0.12, 0.08]         # 升降桌立柱的截面
+COLUMN_INSET: 0.12                # 立柱离桌子短边的距离
+FOOT_SIZE: [0.60, 0.07, 0.04]     # 升降桌底脚
+
+JOINT_LIMIT_MARGIN_DEG: 2.0       # sim-reach 检查时关节角离限位至少这么多
+
+TOWER_XY: [0.15, -0.2598]         # 塔的位置
+
+CUBE_SIZE: 0.025
+CUBE_MASS: 0.012
+CUBE_COLORS:
+  green: [0.21, 0.70, 0.21, 1.0]
+  blue: [0.21, 0.21, 0.70, 1.0]
+PICK_XY: [-0.0647, -0.2415]       # 抓取区中心
+PICK_CUBES:                       # 抓取区的物块：相对 PICK_XY 的 [dx, dy, 颜色]
+  - [-0.03, -0.05, green]
+  - [-0.03, 0.00, blue]
+  - [-0.03, 0.05, green]
+  - [0.03, -0.05, blue]
+  - [0.03, 0.00, green]
+  - [0.03, 0.05, blue]
+
+# 腕部相机。来源：DISCOVERSE@957ef6c models/mjcf/airbot_play/airbot_play_cam.xml（c7e24ef "support mujoco" 用的 MuJoCo 配置）
+CAMERA:
+  PARENT: link6
+  POS: [-0.11, 0.0, -0.11]
+  EULER: [3.1416, 0.0, 1.5708]
+  FOVY: 85.53
+  WIDTH: 640
+  HEIGHT: 480
+  FPS: 30
+  HOUSING_HALF_SIZE: [0.015, 0.015, 0.012]

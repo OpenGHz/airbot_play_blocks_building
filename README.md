@@ -4,7 +4,9 @@ AIRBOT Play 机械臂真机自动搭积木实验：视觉识别物块颜色与�
 
 宿主机上的 ROS Noetic、MoveIt 和全部依赖由 [pixi](https://pixi.sh) 安装（基于 [RoboStack](https://robostack.github.io)），**宿主机不需要 Docker，也不需要 apt 安装 ROS**。机械臂主服务 `airbot_server` 仍在机械臂容器中运行，宿主机通过 gRPC 连接它。
 
-> 只支持真机；仿真（Gazebo / MuJoCo / Isaac 等）相关文件已删除。
+[![MuJoCo 仿真中自动搭积木](docs/media/sim_demo.gif)](docs/media/sim_demo.mp4)
+
+MuJoCo 仿真中自动搭到 13 层（16 倍速，左上角是实际用时；点击图片可看 8 倍速的视频）。右上角是腕部相机画面，视觉识别用的就是它。仿真和真机运行的是同一套程序，见[仿真](#仿真)。
 
 ## 运行结构
 
@@ -67,10 +69,10 @@ xhost + && airbot_server -i can0 -p 50051
 # 终端 1：连接机械臂并启动 MoveIt / RViz（保持运行）
 pixi run bringup
 
-# 终端 2：键盘遥控，确定初始位姿（修改 configs/control/real.json）
+# 终端 2：键盘遥控，确定初始位姿（修改 configs/control/real.yaml）
 pixi run keyboard
 
-# 终端 3：视觉参数（修改 configs/vision/real.json）；最后的数字是相机设备号
+# 终端 3：视觉参数（修改 configs/vision/real.yaml）；最后的数字是相机设备号
 pixi run hsv-finder -na -d 2
 pixi run vision -t pi0 -vd 2          # Pick 阶段期望位置；Place 阶段用 -t pl0
 
@@ -94,9 +96,9 @@ pixi run vision -vd 2                 # 终端 3
 | `clean` | `catkin clean -y` | 清理编译结果 |
 | `doctor` | `scripts/doctor.sh` | 检查子模块、编译、Python 模块、图形界面、机械臂服务、相机 |
 | `bringup` | `roslaunch launch/real_control.launch use_grpc:=true url:=$ARM_URL port:=$ARM_PORT` | 先检查机械臂服务能否连接，连不上会直接提示 |
-| `keyboard` | `rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/real.json` | 键盘遥控 |
+| `keyboard` | `rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/real.yaml` | 键盘遥控 |
 | `hsv-finder` | `python demo/hsv_finder.py` | 滑动条确定 HSV 阈值 |
-| `vision` | `python Best_Contour.py -cfg ./configs/vision/real.json` | 物块识别 |
+| `vision` | `python Best_Contour.py -cfg ./configs/vision/real.yaml` | 物块识别 |
 | `pick-place` | `bash run_pick_place.sh` | 搭积木控制（`adjust 0/1`、`go <p1> <p2>`） |
 | `record` | `python data_driven/record_data.py` | 录制演示数据 |
 
@@ -110,6 +112,23 @@ pixi run vision -vd 2                 # 终端 3
 ARM_URL=192.168.1.10 ARM_PORT=50051 pixi run bringup
 ```
 
+## 仿真
+
+用 MuJoCo 仿真代替机械臂容器，其他终端的命令和真机相同。`bringup` 会自动发现仿真中的机械臂，各程序改用 `configs/*/sim.yaml`；抓取区的物块被抓完后会自动重新摆放。
+
+```bash
+pixi run sim                     # 终端 0：仿真（代替 airbot_server），打开 MuJoCo 窗口
+pixi run bringup                 # 终端 1
+pixi run vision -vd 2            # 终端 3：仿真中 -vd 2 对应虚拟腕部相机
+pixi run pick-place go 90 100    # 终端 2：完整运行
+```
+
+| 任务 | 说明 |
+|------|------|
+| `sim-debug-view` | 腕部相机画面，叠加视觉识别到的轮廓和选中的物块，同时保存到 `runs/sim/debug_*.mp4` |
+| `sim-record` | 录制整个场景（含腕部相机小窗），保存到 `runs/sim/record_*.mp4`，Ctrl+C 结束；上面的演示视频就是这样录的 |
+| `sim-ctl cube ...` | 操作仿真中的物块：`list`、`reset`、`respawn`、`take`、`to-gripper`、`put-under`、`nudge` |
+
 ## 目录结构
 
 ```
@@ -117,7 +136,7 @@ ARM_URL=192.168.1.10 ARM_PORT=50051 pixi run bringup
 ├── airbot_play_pick_place.py    # 搭积木主控制程序（由 run_pick_place.sh 启动）
 ├── Best_Contour.py              # 物块视觉识别
 ├── run_pick_place.sh
-├── configs/{control,vision}/real.json   # 控制 / 视觉参数
+├── configs/{control,vision}/real.yaml   # 控制 / 视觉参数
 ├── launch/real_control.launch   # 真机启动（gRPC 桥接 + MoveIt）
 ├── data_driven/                 # 演示数据录制与转换
 ├── demo -> ros_ws/src/easy_arm_control/demo
