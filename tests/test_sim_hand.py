@@ -105,6 +105,22 @@ def test_drag_the_arm_base_slides_only_the_arm(world):
     assert np.allclose(listed[i], w.cube_pos(i) - w.base), "positions are reported in the moved base frame"
 
 
+def test_drag_the_arm_base_prints_nothing(world, capsys):
+    w, hand = world, Hand(world)
+    base0 = w.data.xpos[w.root].copy()
+    q = np.array([1.0, 0, 0, 0])
+    for _ in range(3):  # three drags, each let go
+        sel = drag(hand, w, "base_link", TRANSLATE, (base0, q), [(base0 + [-0.02, 0.01, 0.0], q)])
+        hand.update(sel, 0, base0, q)
+        base0 = w.data.xpos[w.root].copy()
+    assert capsys.readouterr().out == "", "moving the arm base does not print in the terminal"
+    assert np.allclose(w.mount, [-0.06, 0.03], atol=1e-9)
+    assert "re-record the positions" in hand.texts()[0][3], "the overlay says the recorded positions no longer match"
+    w.set_mount((0.0, 0.0))
+    assert "re-record" not in hand.texts()[0][3], "back on the scene file's mount: no reminder"
+    assert all(t.isascii() for item in hand.texts() for t in item[2:]), "the viewer font is ASCII only"
+
+
 def test_mount_stays_on_the_table(world):
     w = world
     where, why = w.set_mount((0.3, 0.9))

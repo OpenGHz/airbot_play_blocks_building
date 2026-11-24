@@ -12,9 +12,10 @@ applies it the way a hand would:
             which keeps it on the table and refuses moves that put the arm into the table.
             Like on the real robot only the arm moves: the table, the floor marks and the
             cubes stay, so positions recorded in configs/control/sim.yaml no longer match.
+            The overlay says so while the arm is off the scene file's mount; nothing is
+            printed in the terminal (`pixi run sim-ctl arm where` prints the mount).
 
-The viewer's overlay font has no Chinese characters, so the overlay text is in English;
-messages in the terminal are in Chinese like the rest of the simulation.
+The viewer's overlay font has no Chinese characters, so the overlay text is in English.
 """
 
 from __future__ import annotations
@@ -70,8 +71,7 @@ class Hand:
             self.held = [i, centre, yaw]
         elif active & TRANSLATE:  # the arm base: slide on the table top
             target = d["mount0"] + delta[:2]
-            where, why = self.w.set_mount(target)
-            d["moved"] = d["moved"] or not np.allclose(where, d["mount0"])
+            _, why = self.w.set_mount(target)
             self.note = {"": "", "edge": "at the table edge"}.get(why, f"blocked: the {why.split(':', 1)[-1]} would hit the table")
         else:
             self.note = "the arm base only slides, it does not turn"
@@ -94,6 +94,9 @@ class Hand:
                       "Ctrl + left drag   (cubes)\n"
                       "the cube is set down on what is under it\n"
                       f"{dx:+.3f}, {dy:+.3f} m from the scene file's mount   (sim-ctl arm save keeps it)")
+        if not np.allclose(self.w.mount, 0.0):  # as on the real robot: the recorded positions no longer match
+            help_left += "\n"
+            help_right += "\nmoved: re-record the positions in configs/control/sim.yaml (manual section 7), or move it back"
         out = [(font, grid.mjGRID_BOTTOMLEFT, help_left, help_right)]
         sel = self._selected_text()
         if sel:
@@ -112,7 +115,7 @@ class Hand:
             d.update(kind="cube", cube=i, centre0=centre, yaw0=yaw, heading0=heading(refquat))
             self.held = [i, centre.copy(), yaw]
         else:
-            d.update(kind="base", mount0=self.w.mount.copy(), moved=False)
+            d.update(kind="base", mount0=self.w.mount.copy())
             self.note = ""
         return d
 
@@ -122,10 +125,6 @@ class Hand:
             i = self.held[0]
             self.held = None
             self.w.put_down(i)
-        elif d["moved"]:
-            print(f"[sim] {self.w.mount_text()}", flush=True)
-            print("[sim] 和真机一样，只有机械臂动了：configs/control/sim.yaml 里记录的位置要按手册 §7 重新记录，"
-                  "或者把机械臂移回原处。要下次启动时沿用这个安装位置：pixi run sim-ctl arm save", flush=True)
 
     def _selected_text(self) -> str:
         sel = self.select
