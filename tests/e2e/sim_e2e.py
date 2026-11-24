@@ -8,6 +8,8 @@ report.json to runs/e2e/<scenario>_<time>/.
 
 Scenarios
   floor     configs/control/sim.yaml, floor scene; stop after --blocks blocks (default 6).
+  open-place  the same with `--open-place`: no vision in the place stage, each block is released
+            right over the first one.
   limit     configs/control/real.yaml, tabletop scene (the real robot's layout, tower on the
             other side of the pick area): build until the arm cannot go higher, answer the
             prompt with Enter. Expected: 7 blocks, back Home, exit status 0.
@@ -20,7 +22,8 @@ Scenarios
             closes at the scan point and only pinches pick-area cubes by an edge, then drops
             them high above the tower, so the tower and clearance numbers are not reported.
 
-Every run reports: blocks on the tower; tower blocks that moved by more than 3 mm and whether
+Every run reports: blocks on the tower; how far each tower block is off the bottom one;
+tower blocks that moved by more than 3 mm and whether
 the arm touched the tower just before; the smallest distance between the arm (with the block it
 holds) and the tower while moving between the pick area and the tower (the straight vertical
 moves right at the tower top are excluded, they are meant to be close); and stops in the middle
@@ -276,6 +279,18 @@ class Monitor(threading.Thread):
         r = self.d.xmat[b].reshape(3, 3)
         return math.degrees(math.atan2(r[1, 0], r[0, 0])) % 90
 
+    def tower_alignment(self) -> dict:
+        """Horizontal offsets (mm) of the settled tower blocks, bottom to top, in the last state."""
+        bodies = {i: b for b, i in self.cubes.items()}
+        pos = sorted((self.d.xpos[bodies[i]].copy() for i in self.ref), key=lambda p: p[2])
+        if len(pos) < 2:
+            return {}
+        xy = np.array([p[:2] for p in pos])
+        from_bottom = np.linalg.norm(xy - xy[0], axis=1) * 1000
+        steps = np.linalg.norm(np.diff(xy, axis=0), axis=1) * 1000
+        return {"offset_from_bottom_mm": [round(float(v), 1) for v in from_bottom],
+                "max_step_mm": round(float(steps.max()), 1)}
+
     def stationary_for(self) -> float:
         """Seconds the arm joints have not moved."""
         if not self.samples:
@@ -357,7 +372,8 @@ def old_worktree() -> pathlib.Path:
 
 
 def run(name: str, scene_name: str, env_type: str, program: str = "new", vision: str = "camera",
-        record: bool = False, out: pathlib.Path | None = None, policy=None, timeout: float = 900.0) -> dict:
+        record: bool = False, out: pathlib.Path | None = None, policy=None, timeout: float = 900.0,
+        args: tuple = ()) -> dict:
     out = out or REPO / "runs/e2e" / f"{name}_{time.strftime('%Y%m%d_%H%M%S')}"
     out.mkdir(parents=True, exist_ok=True)
     cfg = scene.load_config(scene_name)
@@ -394,7 +410,7 @@ def run(name: str, scene_name: str, env_type: str, program: str = "new", vision:
         monitor = Monitor(out / "sim.sock", cfg, control)
         monitor.start()
         cwd = old_worktree() if program == "old" else REPO
-        cmd = [sys.executable, "airbot_play_pick_place.py", "-cp", "2", "-r"]
+        cmd = [sys.executable, "airbot_play_pick_place.py", "-cp", "2", "-r", *args]
         if record:
             cmd = [sys.executable, str(REPO / "tests/e2e/record_motion.py"), str(out / "motion.jsonl")] + cmd[1:]
         stack.start("pick_place", cmd, cwd=cwd, pipe=True)
@@ -432,6 +448,7 @@ def run(name: str, scene_name: str, env_type: str, program: str = "new", vision:
         scan = np.array([control["PICK_POSITION_X"], control["PICK_POSITION_Y"], control["PICK_POSITION_Z"]])
         report["events"] = monitor.events
         report["tower_disturbed"] = [e for e in monitor.events if "tower disturbed" in e[1]]
+        report["tower_alignment"] = monitor.tower_alignment()
         report.update(monitor.analyse(scan))
         report["monitor_error"] = monitor.error
     (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1))
@@ -565,6 +582,10 @@ def summary(r: dict, tower: bool = True) -> str:
         return "\n".join(lines)
     lines.append(f"   tower disturbed: {len(r.get('tower_disturbed') or [])}"
                  + "".join(f"\n     {e[0]} s {e[1]}" for e in (r.get("tower_disturbed") or [])))
+    if r.get("tower_alignment"):
+        a = r["tower_alignment"]
+        lines.append(f"   tower alignment: largest step between layers {a['max_step_mm']} mm; "
+                     f"offset from the bottom block, bottom to top (mm): {a['offset_from_bottom_mm']}")
     if "transfers" in r:
         lines.append(f"   transfers: {len(r['transfers'])}, stops in the middle: {r['stops_in_transfers']}; "
                      f"smallest arm-tower distance while transferring: {r['min_clearance_mm']} mm {r.get('min_clearance_at') or ''}")
@@ -578,11 +599,12 @@ def summary(r: dict, tower: bool = True) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split("\n\n", 1)[1])
-    ap.add_argument("scenario", choices=["floor", "limit", "baseline", "kill-sim", "golden"])
-    ap.add_argument("--blocks", type=int, default=6, help="floor: stop after this many blocks")
+    ap.add_argument("scenario", choices=["floor", "open-place", "limit", "baseline", "kill-sim", "golden"])
+    ap.add_argument("--blocks", type=int, default=6, help="floor, open-place: stop after this many blocks")
     args = ap.parse_args()
-    if args.scenario == "floor":
-        r = run("floor", "floor", "sim", policy=stop_after(args.blocks))
+    if args.scenario in ("floor", "open-place"):
+        extra = ("--open-place",) if args.scenario == "open-place" else ()
+        r = run(args.scenario, "floor", "sim", policy=stop_after(args.blocks), args=extra)
         ok = r["blocks"] >= args.blocks and not r["tower_disturbed"] and r["stops_in_transfers"] == 0
     elif args.scenario == "limit":
         r = run("limit", "tabletop", "real", policy=answer_enter)

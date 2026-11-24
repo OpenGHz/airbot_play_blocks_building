@@ -4,7 +4,7 @@
 
 真机和 MuJoCo 仿真走的是同一套分支：`run_pick_place.sh` 两边都按真机启动，程序里的 `use_sim` 都是 False。下文的数值两边相同。
 
-代码里还有键盘控制、开环放置、测距传感器、异侧抓放（`area_mode = 0`）和 Gazebo / Isaac 的分支，`pixi run pick-place` 走不到，本文不写。
+代码里还有键盘控制、测距传感器、异侧抓放（`area_mode = 0`）和 Gazebo / Isaac 的分支，`pixi run pick-place` 走不到，本文不写。开环放置见 §2 末尾。
 
 符号：
 
@@ -26,6 +26,7 @@
 | `pixi run pick-place adjust 0` | `-cp 0` | 只跟踪：到扫描位姿后按视觉偏差移动，不下抓。用来调 `control_param1` |
 | `pixi run pick-place adjust 1` | `-cp 1` | 完整流程，但从第 2 块起 Place 阶段一直调节，不松开。用来调 `control_param2` |
 | `pixi run pick-place go P1 P2` | `-cp 2`，并设 `control_param1 = P1`、`control_param2 = P2` | 完整流程 |
+| `pixi run pick-place go P1 P2 open-place` | 再加 `--open-place` | 完整流程，开环放置（§2 末尾）。`control_param2` 用不到 |
 
 配置读 `configs/control/<env_type>.yaml`（`/env_type` 由 `pixi run bringup` 设置：真机 `real`，仿真 `sim`）。
 
@@ -87,6 +88,14 @@
 - 松开高度更新为 zr(k + 1)。
 - 颜色换成另一种。
 
+开环放置（`open-place`，代码里 `place_mode = 1`）和上面的区别：
+
+- 第 1 ~ 3 步不变，抓取仍然靠视觉跟踪。
+- 第 5、6 步：从第 2 块起也去第 1 块的点（比放置点多移的 1 cm 也加上），不是 (`PLACE_POSITION_X`, `PLACE_POSITION_Y`)。
+- 第 7 步不做：下抓后视觉切到 `pause`，Place 阶段一直不打开。
+- 第 8、9 步：到位后直接下降 g 并松开（第 1 块不下降）。触发用的是程序自己的线程 `__pick_place_test`：Place 阶段每 0.5 s 往 `/target_TF` 发一帧零偏差。
+- 物块在夹爪里的偏差不会被纠正，会一层层带到塔上。
+
 ## 3. 视觉给了什么，什么时候下抓 / 松开
 
 `pixi run vision`（`Best_Contour.py`）按 `/vision_attention` 选颜色，识别到目标时在 `/target_TF` 上发一帧偏差（像素），没识别到就不发：
@@ -105,6 +114,7 @@ Place 阶段图像第 423 行以下不参与识别（视觉在仿真里也走真
 |------|------|------|------|
 | Pick | 切换阶段后的前 3 帧跳过；之后 \|dx\| + \|dy\| < 5 px 且转角 < 1° | 第一次满足先等 0.5 s，下一帧仍满足才下抓（第 2 步） | 跟踪一步（§5） |
 | Place，第 1 块 | 收到任意一帧 | 直接松开（第 9 步） | — |
+| Place，开环放置 | 收到任意一帧（程序自己发的零偏差） | 下降 g（第 1 块不降）、松开 | — |
 | Place，之后 | 切换阶段后的前 3 帧跳过；之后 \|dx\| < 2 px 且 \|dy\| < 2 px | 同样先等 0.5 s，下一帧仍满足才下降 g、松开（第 8、9 步）。`adjust 1` 时永远不松开，一直调节 | 跟踪一步 |
 
 ## 4. 规划场景

@@ -82,9 +82,11 @@ pixi run vision -vd 2                 # 终端 3
 pixi run rosparam set control_param1 20.25   # 终端 4；Place 阶段为 control_param2
 
 # 完整运行
-pixi run pick-place go 20.25 40.51    # 终端 2
+pixi run pick-place go 20.25 40.51    # 终端 2；末尾加 open-place 为开环放置（见下）
 pixi run vision -vd 2                 # 终端 3
 ```
+
+**开环放置**（`pixi run pick-place go P1 P2 open-place`）：抓取仍然靠视觉跟踪；放置不用视觉，每一块都直接到第一块的正上方，下降 `GAP_PLACE` 后松开。物块在夹爪里的偏差不会被纠正，会带到塔上。
 
 `pixi run <任务>` 后面的参数会原样传给对应的命令。《实验手册》原命令与新命令的逐条对照见 [docs/commands.md](docs/commands.md)。
 
@@ -105,7 +107,7 @@ pixi run vision -vd 2                 # 终端 3
 | `keyboard` | `scripts/keyboard.sh` → `rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/<env_type>.yaml` | 键盘遥控 |
 | `hsv-finder` | `scripts/hsv_finder.sh` → `python demo/hsv_finder.py` | 滑动条确定 HSV 阈值 |
 | `vision` | `scripts/vision.sh` → `python Best_Contour.py -cfg ./configs/vision/<env_type>.yaml` | 物块识别，窗口内容见下面的"视觉窗口" |
-| `pick-place` | `bash run_pick_place.sh` | 搭积木控制（`adjust 0/1`、`go <p1> <p2>`） |
+| `pick-place` | `bash run_pick_place.sh` | 搭积木控制（`adjust 0/1`、`go <p1> <p2>`，加 `open-place` 为开环放置） |
 | `record` | `python data_driven/record_data.py` | 录制演示数据 |
 
 `pixi task list` 可以随时查看。
@@ -188,7 +190,7 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 | 任务 | 说明 |
 |------|------|
 | `test` | 单元测试和机械臂驱动的契约测试（仿真驱动连不开窗口的仿真，`airbot_py` 驱动连假的 `airbot_server`），不需要 ROS。GitHub Actions 上也跑这一项 |
-| `test-e2e <场景>` | 在仿真里跑完整流程（独立的 ROS master，不影响正在运行的程序），日志和结果在 `runs/e2e/`。场景：`floor`（地面搭 6 块）、`limit`（真机布局搭到上限，按回车回 Home）、`baseline`（改动前的程序，应在第 7 块后卡住）、`kill-sim`（中途关掉仿真）、`golden`（改动前后发给 MoveIt 的运动目标对比） |
+| `test-e2e <场景>` | 在仿真里跑完整流程（独立的 ROS master，不影响正在运行的程序），日志和结果在 `runs/e2e/`。场景：`floor`（地面搭 6 块）、`open-place`（同上，开环放置）、`limit`（真机布局搭到上限，按回车回 Home）、`baseline`（改动前的程序，应在第 7 块后卡住）、`kill-sim`（中途关掉仿真）、`golden`（改动前后发给 MoveIt 的运动目标对比） |
 
 ## 目录结构
 

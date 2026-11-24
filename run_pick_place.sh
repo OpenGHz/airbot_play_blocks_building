@@ -34,6 +34,8 @@ while [ "$1" != "" ]; do
 		shift
 	elif [ "$1" == "fixed" ];then
 		fixed='--fixed'
+	elif [ "$1" == "open-place" ];then
+		open_place='--open-place'
     fi
     shift
 done
@@ -53,4 +55,4 @@ fi
 sleep 1
 
 # start follow script
-python3 airbot_play_pick_place.py "${adjust}" "${adjust_param}" "${go}" "${go_param}" "${use_real}" "${sim_type}" "${fixed}"
+python3 airbot_play_pick_place.py "${adjust}" "${adjust_param}" "${go}" "${go_param}" "${use_real}" "${sim_type}" "${fixed}" "${open_place}"

@@ -146,6 +146,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self.loginfo(f'use_sim={self.use_sim}')
         self.sim_type = sim_type if sim_type != "real" else None
         self.pick_place_area_mode = area_mode
+        self.place_mode = 0  # 放置方式，由PickPlace设置（0闭环，1开环，2键控）
         # 规划场景：地面和塔作为碰撞体，抓取区与塔之间的转移交给MoveIt绕行（同侧pick&place布局）
         self._use_scene = area_mode == 1
         # 第一块的放置位置：实机沿放置姿态下末端z轴（两指之间的空隙方向）多放0.01。原来加在基座x上，
@@ -255,7 +256,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
     def PickPlace(self,pick_keyboard=False,place_mode=0,start_base=0,use_gripper=True):
         """
             pick_keyboard为真时pick和place均通过键盘控制完成，为假则pick自动完成，place根据mode配置。
-            place_mode为0时，采用自动闭环控制；为1时采用自动半闭环控制；为2时采用键盘控制。
+            place_mode为0时，采用自动闭环控制；为1时抓取闭环、放置开环（不用视觉，到第一块正上方后直接下降并松开，--open-place）；为2时采用键盘控制。
             start_base表示初始化时认为已经叠放好的物块个数，默认为0。
         """
         self.__pick_keyboard = pick_keyboard
@@ -587,11 +588,12 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         return True
 
     def _resume_after(self, fault: TaskFault):
-        """ 重试成功后继续：重新打开视觉（当前阶段的颜色） """
+        """ 重试成功后继续：重新打开视觉（当前阶段的颜色）。开环放置时Place阶段不开视觉，由__pick_place_test发的零偏差触发松开 """
         self._first_out = 3
         for t in self._track.values(): t.reset()
         self._first_pick_satisfy = self._first_place_satisfy = False
-        rospy.set_param("/vision_attention", self._pick_place_stage + str(self.pick_place_0_1))
+        open_place = self._pick_place_stage == 'place' and self.place_mode == 1
+        rospy.set_param("/vision_attention", 'pause' if open_place else self._pick_place_stage + str(self.pick_place_0_1))
         print('继续搭建')
 
     def _go_home_and_exit(self):
@@ -797,7 +799,8 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             self.gripper_control(0,sleep_time=0.5)  # 然后发送释放指令
             self._change_pick_place_state('pick',set_vision=not(pick_keyboard))  # 切换状态
         elif place_mode == 1:  # 开环控制
-            self.go_to_shift_single_axis_target(2,-self._gap_place,sleep_time=1)  # 下降到恰好相接触处进行释放
+            # 下降到恰好相接触处进行释放；第一块已经在松开高度（和闭环一样不下降）
+            if self._change_pick_place_state.times != 0: self.go_to_shift_single_axis_target(2,-self._gap_place,sleep_time=1)
             self.gripper_control(0,sleep_time=0.5)  # 然后发送释放指令
             self._change_pick_place_state('pick',set_vision=not(pick_keyboard))  # 状态切换到pick
         # 闭环控制
@@ -926,7 +929,8 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             z_end = self._place_base_z + (self._gap_place if self.use_sim else 0.0)
             z_above = self._place_base_z + h
         else:
-            xy = self._place_xy
+            # 闭环时到放置点上方，偏差由视觉调节补回；开环没有调节，直接到第一块的正上方
+            xy = self._first_xy if self.place_mode == 1 else self._place_xy
             z_end = self._place_base_z + self._gap_place  # 无测距传感器时测高位置就是调节位置
             z_above = z_end + 0.01
         if self._transit_z_min is None:  # 与原来一样：首块抬升h+0.01，之后抬到测高高度
@@ -944,7 +948,8 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         t.run(start, [s1, s2, s3], vel=0.5, acc=0.3, end_xyz=[*xy, z_end], end_rpy=self._place_rpy)
         rospy.sleep(0.5)  # 停稳
         if not first:
-            self.loginfo(f'到达调节位置，开始闭环叠放第{k+1}个物块')
+            self.loginfo(f'到达第一块正上方，开环叠放第{k+1}个物块' if self.place_mode == 1
+                         else f'到达调节位置，开始闭环叠放第{k+1}个物块')
 
     def go_to_place_pose(self,first=False,use_tof=True,place_mode=0):
         """ 多种方式到达place位姿 """
@@ -1163,6 +1168,8 @@ if __name__ == "__main__":
     parser.add_argument('-gb','--gibson',action='store_true',help='use gibson instead of isaac sim')
     parser.add_argument('-fx','--fixed',action='store_true',help='use gazebo with fixed base')
     parser.add_argument('-gr','--gripper',type=str,default="gripper",help='gripper type')
+    parser.add_argument('--open-place',action='store_true',
+                        help='place without the vision: release right over the first block (open loop); picking still tracks')
     args, unknown = parser.parse_known_args()
 
     NODE_NAME = 'airbot_play_pick_place'
@@ -1207,15 +1214,17 @@ if __name__ == "__main__":
     airbot_player.load_configs(file_path)
 
     # 根据真机还是仿真初始化pick & place 任务
-    place_mode_0 = {'isaac'}  # 0表示在一侧pick另一侧place；1表示同侧pick&place
-    place_mode = 1 if sim_type not in place_mode_0 else 0
-    airbot_player.task_pick_place_param_init(place_mode, sim_type=sim_type)
+    area_mode_0 = {'isaac'}  # 0表示在一侧pick另一侧place；1表示同侧pick&place
+    area_mode = 1 if sim_type not in area_mode_0 else 0
+    airbot_player.task_pick_place_param_init(area_mode, sim_type=sim_type)
     # 传入args.control_param参数，则进行参数配置阻塞以及自动夹取控制
     print('args.control_param=', control_param)
     if control_param >= 0: airbot_player.set_control_param(control_param)  # 自调参数（包括pick和place）
     if control_param == 0: auto_pick_place = False  # 不自动夹取（也即相当于仅调节pick阶段）
     # 自动模式配置
-    if auto_pick_place: airbot_player.PickPlace(pick_keyboard=False,place_mode=0,start_base=0)
+    if auto_pick_place:
+        if args.open_place: rospy.loginfo('开环放置：Place阶段不用视觉，到第一块的正上方后直接下降并松开')
+        airbot_player.PickPlace(pick_keyboard=False,place_mode=1 if args.open_place else 0,start_base=0)
     elif auto_follow: airbot_player.AutoFollow()
     rospy.loginfo("{} Node Ready.".format(NODE_NAME))
     airbot_player.wait_for_faults()  # 主线程：动作失败时停在原地，等用户选择回Home或重试
