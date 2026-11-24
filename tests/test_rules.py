@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from airbot_play_rules import (TrackLimit, fingers_beside_top_block, floor_and_tower_z, release_z, retreat_sign,
-                               slot_axis, slot_exit_targets)
+from airbot_play_rules import (TrackLimit, fingers_beside_top_block, first_place_xy, floor_and_tower_z, release_z,
+                               retreat_sign, slot_axis, slot_exit_targets)
 
 H = 0.025  # CUBE_HEIGHT
 
@@ -99,6 +99,26 @@ def test_slot_exit_tries_the_end_closer_to_the_base_first():
     assert math.hypot(*first[:2]) < math.hypot(*second[:2])
     assert first[2] == second[2] == 0.178  # a horizontal slide
     assert math.dist(first, second) == pytest.approx(0.12)
+
+
+@pytest.mark.parametrize("place", [(0.2734, 0.2145), (0.2121, -0.2121)])  # real.yaml, sim.yaml
+def test_first_place_shift_is_the_old_base_x_shift_with_the_shipped_orientation(place):
+    # Both configs place with rpy (0, 1.570796, 0): the old code's +0.01 along the base x.
+    from robot_tools import transformations
+
+    q = list(transformations.quaternion_from_euler(0, 1.570796, 0))
+    assert first_place_xy(place, q) == pytest.approx((place[0] + 0.01, place[1]))
+
+
+@pytest.mark.parametrize("yaw", [0.4, math.pi / 2, math.pi, -1.2])
+def test_first_place_shift_follows_the_gripper_z_axis(yaw):
+    from robot_tools import transformations
+
+    place, q = (0.2734, 0.2145), _quat_down(yaw)
+    z_axis = transformations.quaternion_matrix(q)[:3, 2]  # custom_end_link z: along the gap between the fingers
+    x, y = first_place_xy(place, q)
+    assert (x - place[0], y - place[1]) == pytest.approx((0.01 * z_axis[0], 0.01 * z_axis[1]), abs=1e-9)
+    assert (x - place[0], y - place[1]) != pytest.approx((0.01, 0.0), abs=1e-4)  # no longer the base x
 
 
 def test_fingers_beside_top_block():

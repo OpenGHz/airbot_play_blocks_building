@@ -85,6 +85,21 @@ def slot_axis(xyzw) -> tuple[float, float]:
     return ax / n, ay / n
 
 
+FIRST_PLACE_SHIFT = 0.01  # the real robot releases the first block this much off PLACE_POSITION_X/Y (m)
+
+
+def first_place_xy(place_xy, xyzw, shift: float = FIRST_PLACE_SHIFT) -> tuple[float, float]:
+    """Where the real robot releases the first block: PLACE_POSITION_X/Y moved `shift` along
+    custom_end_link's z axis at the place orientation (xyzw), i.e. along the gap between the fingers.
+
+    The fingers hold a block along their opening direction only, so a grasped block can be off
+    centre along the gap only. The old code added the shift to the base x, which is the same
+    direction only while the gripper points down with yaw 0 (rpy 0, pi/2, 0, every shipped config).
+    """
+    ux, uy = slot_axis(xyzw)
+    return place_xy[0] + shift * ux, place_xy[1] + shift * uy
+
+
 def slot_exit_targets(eef_xyz, xyzw, distance: float = SLOT_EXIT) -> list[list[float]]:
     """Both ends of a horizontal slide along the finger gap, the one closer to the robot base first
     (moving in keeps the arm away from its reach limit)."""

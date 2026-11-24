@@ -9,8 +9,8 @@ from threading import Thread,Event
 from copy import deepcopy
 
 from easy_arm_control.control import RoboticArmAgent, CoordinateTools, ChooseGripper
-from airbot_play_rules import (TrackLimit, fingers_beside_top_block, floor_and_tower_z, release_z, retreat_sign,
-                               slot_exit_targets)
+from airbot_play_rules import (TrackLimit, fingers_beside_top_block, first_place_xy, floor_and_tower_z, release_z,
+                               retreat_sign, slot_exit_targets)
 from airbot_play_transfer import TowerScene, Transfer
 
 GRIPPER_LINKS = ("link6", "left", "right")  # 抓着的物块可以接触的连杆（airbot_play URDF）
@@ -148,8 +148,10 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self.pick_place_area_mode = area_mode
         # 规划场景：地面和塔作为碰撞体，抓取区与塔之间的转移交给MoveIt绕行（同侧pick&place布局）
         self._use_scene = area_mode == 1
-        # 第一块的放置位置（实机x方向多放0.01，见go_to_place_pose）；塔在规划场景里就放在这里
-        self._first_xy = (self._place_xy[0] + (0.0 if self.use_sim else 0.01), self._place_xy[1])
+        # 第一块的放置位置：实机沿放置姿态下末端z轴（两指之间的空隙方向）多放0.01。原来加在基座x上，
+        # 放置姿态为rpy(0, pi/2, 0)时两者相同。塔在规划场景里就放在这里
+        self._first_xy = (self._place_xy if self.use_sim
+                          else first_place_xy(self._place_xy, self.euler_to_quaternion(self._place_rpy)))
         if self._use_scene:
             floor_z, tower_z = floor_and_tower_z(self._pick_base_z, self._place_z0, self._cube_height)
             self._scene = TowerScene(self.basic_c.get_name_space(), self.basic_c.get_planning_frame(),
@@ -970,9 +972,9 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
                 self.set_and_go_to_pose_target([*self._place_xy,self._place_base_z+self._gap_place],self._place_rpy,sleep_time=1)
             else:  # 实机由于各种误差因素需要更细致的控制
                 # self.speed_control(0.4,0.5)
-                self.set_and_go_to_pose_target([self._place_xy[0]+0.01,self._place_xy[1],self._pick_base_z+self._cube_height],self._place_rpy,sleep_time=0.5,vel_limit=0.4,acc_limit=0.2)  # 先保证xy对正，放置卡位造成xy无法到达目标引起偏差
+                self.set_and_go_to_pose_target([*self._first_xy,self._pick_base_z+self._cube_height],self._place_rpy,sleep_time=0.5,vel_limit=0.4,acc_limit=0.2)  # 先保证xy对正，放置卡位造成xy无法到达目标引起偏差
                 # self.speed_control(0.4,0.5)
-                self.set_and_go_to_pose_target([self._place_xy[0]+0.01,self._place_xy[1],self._place_base_z],self._place_rpy,sleep_time=1,vel_limit=0.2,acc_limit=0.2)
+                self.set_and_go_to_pose_target([*self._first_xy,self._place_base_z],self._place_rpy,sleep_time=1,vel_limit=0.2,acc_limit=0.2)
             return
         else:
             disget_z = self._place_base_z + self._gap_disget
