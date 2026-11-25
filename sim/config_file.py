@@ -25,11 +25,11 @@ def set_keys(path, values: dict, after: str | None = None) -> None:
     for key, val in values.items():
         flow = json.dumps(val)  # JSON numbers, strings and lists are valid YAML flow values
         pat = re.compile(rf"^({re.escape(key)}:[ \t]*)([^#\n]*?)([ \t]*#[^\n]*)?$", re.M)
-        new, n = pat.subn(lambda m: m.group(1) + flow + (m.group(3) or ""), text, count=1)
+        new, n = pat.subn(lambda m, flow=flow: m.group(1) + flow + (m.group(3) or ""), text, count=1)
         if n == 0:
             line = f"{key}: {flow}\n"
             m = re.search(rf"^{re.escape(after)}:[^\n]*\n", text, re.M) if after else None
-            new = text[: m.end()] + line + text[m.end():] if m else text.rstrip("\n") + "\n" + line
+            new = text[: m.end()] + line + text[m.end() :] if m else text.rstrip("\n") + "\n" + line
         text = new
     path.write_text(text)
     check = load(path)

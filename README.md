@@ -200,6 +200,8 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 |------|------|
 | `test` | 单元测试和机械臂驱动的契约测试（仿真驱动连不开窗口的仿真，`airbot_py` 驱动连假的 `airbot_server`），不需要 ROS。GitHub Actions 上也跑这一项 |
 | `test-e2e <场景>` | 在仿真里跑完整流程（独立的 ROS master，不影响正在运行的程序），日志和结果在 `runs/e2e/`。场景：`floor`（地面搭 6 块）、`open-place`（同上，开环放置）、`held-cube`（同上，视觉加 `--held-cube`；`floor`、`held-cube` 可再加 `--place-stop 0.5`；`floor`、`open-place`、`held-cube`、`limit`、`golden` 可再加 `--no-scene`）、`limit`（真机布局搭到上限，按回车回 Home）、`baseline`（改动前的程序，应在第 6 块后卡住；真机用旧模型时是第 7 块）、`kill-sim`（中途关掉仿真）、`golden`（改动前后发给 MoveIt 的运动目标对比） |
+| `lint` | 检查 Python 代码的格式和常见问题（ruff，规则在 `ruff.toml`，不含 `ros_ws/src` 下的子模块），GitHub Actions 上也跑 |
+| `fmt` | 按 ruff 格式化代码并应用安全的自动修复；提交前跑一次，`lint` 就能通过 |
 
 ## 目录结构
 

@@ -1,16 +1,15 @@
+import json
+import multiprocessing
+import os
+import time
+from threading import Thread
+
 import cv2
 import numpy as np
-import time
-import json
-import os
-import multiprocessing
-from threading import Thread
-from typing import Union, List
-
 from hdf5er import save_one_episode
 
 
-class Raw2Hdf5(object):
+class Raw2Hdf5:
     def __init__(self, root_dir, task_name, json_name, camera_names, episode_num):
         """
         default video type is "avi"; if you want to change it, you can use "set_video_type" method
@@ -97,24 +96,16 @@ class Raw2Hdf5(object):
         print("Start to init data")
         # get raw json data and info
         joint_num, self.episode_len, self.keys = self.get_data_info()
-        assert (
-            joint_num == self.joint_num
-        ), f"joint_num: {joint_num} not equal to {self.joint_num} set manually"
+        assert joint_num == self.joint_num, f"joint_num: {joint_num} not equal to {self.joint_num} set manually"
         print(f"episode_len: {self.episode_len}")
         # print("keys:", self.keys)
         # 初始化基本数据
         self.data = {
-            self.name_obs_joint_positions_o: np.zeros(
-                (self.episode_len, self.states_num)
-            ),
-            self.name_act_joint_positions_o: np.zeros(
-                (self.episode_len, self.states_num)
-            ),
+            self.name_obs_joint_positions_o: np.zeros((self.episode_len, self.states_num)),
+            self.name_act_joint_positions_o: np.zeros((self.episode_len, self.states_num)),
         }
         for name in self.camera_names:
-            self.data[self.name_obs_images_o + "/" + name] = [
-                np.zeros(self.image_shape)
-            ] * self.episode_len
+            self.data[self.name_obs_images_o + "/" + name] = [np.zeros(self.image_shape)] * self.episode_len
         self.video_type = "avi"
         print("Init data done.")
 
@@ -128,20 +119,14 @@ class Raw2Hdf5(object):
                 *self.name_act_end_positions_i,
             ]
         )
-        assert set(self.camera_names).issubset(
-            possible_camera_names
-        ), f"camera names: {self.camera_names} not subset of {possible_camera_names}"
-        assert (
-            self.states_num in possible_states_num
-        ), f"states_num: {self.states_num} not in {possible_states_num}"
-        assert names_set.issubset(
-            set(self.keys)
-        ), f"names: {names_set} not subset of data keys: {self.keys}"
+        assert set(self.camera_names).issubset(possible_camera_names), (
+            f"camera names: {self.camera_names} not subset of {possible_camera_names}"
+        )
+        assert self.states_num in possible_states_num, f"states_num: {self.states_num} not in {possible_states_num}"
+        assert names_set.issubset(set(self.keys)), f"names: {names_set} not subset of data keys: {self.keys}"
         # 检查最后一个目标episode是否存在
         if not os.path.exists(self.task_path + f"{self.end_episode}"):
-            raise ValueError(
-                f"episode_num: {self.episode_num} not exist in {self.task_path}"
-            )
+            raise ValueError(f"episode_num: {self.episode_num} not exist in {self.task_path}")
         # 检查episode_num是否是最后一个文件夹的数字
         if os.path.exists(self.task_path + f"{self.episode_num}"):
             print("Note: episode_num not the last one")
@@ -150,25 +135,17 @@ class Raw2Hdf5(object):
         """设置额外的记录，如速度、力矩、底盘等数据"""
         for name in names:
             if name == "vel":
-                self.data["/observations/qvel"] = [
-                    np.zeros(self.joint_num * self.agent_num)
-                ] * self.episode_len
+                self.data["/observations/qvel"] = [np.zeros(self.joint_num * self.agent_num)] * self.episode_len
                 self.other_record["vel"] = True
             elif name == "eff":
-                self.data["/observations/effort"] = [
-                    np.zeros(self.joint_num * self.agent_num)
-                ] * self.episode_len
+                self.data["/observations/effort"] = [np.zeros(self.joint_num * self.agent_num)] * self.episode_len
                 self.other_record["eff"] = True
             elif name == "base":
                 self.data["/base_action"] = [np.zeros(2)] * self.episode_len
                 self.other_record["base"] = True
             elif name == "eef_pose":
-                self.data[self.name_obs_eef_pose_o] = [
-                    np.zeros(7 * self.agent_num)
-                ] * self.episode_len
-                self.data[self.name_act_eef_pose_o] = [
-                    np.zeros(7 * self.agent_num)
-                ] * self.episode_len
+                self.data[self.name_obs_eef_pose_o] = [np.zeros(7 * self.agent_num)] * self.episode_len
+                self.data[self.name_act_eef_pose_o] = [np.zeros(7 * self.agent_num)] * self.episode_len
                 self.other_record["eef_pose"] = True
 
     def set_video_type(self, video_type):
@@ -189,9 +166,7 @@ class Raw2Hdf5(object):
             eef_joint_num = 1
         else:
             eef_joint_num = len(eef_data)
-        joint_num = (
-            len(raw_json_data[self.name_obs_joint_positions_i[0]][0]) + eef_joint_num
-        )
+        joint_num = len(raw_json_data[self.name_obs_joint_positions_i[0]][0]) + eef_joint_num
         episode_len = len(raw_json_data[self.name_obs_joint_positions_i[0]])
         keys = list(raw_json_data.keys())
         return joint_num, episode_len, keys
@@ -208,48 +183,40 @@ class Raw2Hdf5(object):
             pos_t = np.array(json_data[self.name_act_joint_positions_i[n]])
             endpos_t = np.array(json_data[self.name_act_end_positions_i[n]])
             slices = slice(n * self.joint_num, (n + 1) * self.joint_num)
-            self.data[self.name_obs_joint_positions_o][:, slices] = np.hstack(
-                (pos_f, endpos_f.reshape(-1, 1))
-            )
-            self.data[self.name_act_joint_positions_o][:, slices] = np.hstack(
-                (pos_t, endpos_t.reshape(-1, 1))
-            )
+            self.data[self.name_obs_joint_positions_o][:, slices] = np.hstack((pos_f, endpos_f.reshape(-1, 1)))
+            self.data[self.name_act_joint_positions_o][:, slices] = np.hstack((pos_t, endpos_t.reshape(-1, 1)))
             # 存储额外数据
             if self.other_record["eef_pose"]:
                 eef_pose_f = np.array(json_data[self.name_obs_eef_pose_i[n]])
                 eef_pose_t = np.array(json_data[self.name_act_eef_pose_i[n]])
                 self.data[self.name_obs_eef_pose_o][:, slices] = np.concatenate(
-                    [eef_pose_f[:,0,:], eef_pose_f[:,1,:]], axis=1
+                    [eef_pose_f[:, 0, :], eef_pose_f[:, 1, :]], axis=1
                 )
                 self.data[self.name_act_eef_pose_o][:, slices] = np.concatenate(
-                    [eef_pose_t[:,0,:], eef_pose_t[:,1,:]], axis=1
+                    [eef_pose_t[:, 0, :], eef_pose_t[:, 1, :]], axis=1
                 )
             if self.other_record["vel"]:  # TODO: 支持修改名称
                 vel_f = np.array(json_data["/observations/vel_f"])
                 endvel_f = np.array(json_data["/observations/endvel_f"])
-                self.data["/observations/qvel"][:, slices] = np.hstack(
-                    (vel_f, endvel_f.reshape(-1, 1))
-                )
+                self.data["/observations/qvel"][:, slices] = np.hstack((vel_f, endvel_f.reshape(-1, 1)))
             if self.other_record["eff"]:  # TODO: 支持修改名称
                 eff_f = np.array(json_data["/observations/eff_f"])
                 endeff_f = np.array(json_data["/observations/endeff_f"])
-                self.data["/observations/effort"][:, slices] = np.hstack(
-                    (eff_f, endeff_f.reshape(-1, 1))
-                )
+                self.data["/observations/effort"][:, slices] = np.hstack((eff_f, endeff_f.reshape(-1, 1)))
             if self.other_record["base"]:
                 self.data["/base_action"] = json_data["/base_action"]
 
         assert self.data[self.name_obs_joint_positions_o].shape == (
             self.episode_len,
             self.states_num,
-        ), f"states shape: {self.data[self.name_obs_joint_positions_o].shape} not equal to ({self.episode_len}, {self.states_num})"
+        ), (
+            f"states shape: {self.data[self.name_obs_joint_positions_o].shape} not equal to ({self.episode_len}, {self.states_num})"
+        )
 
     def _read_video_images(self, episode):
         """读取视频文件中的图像，并存储到self.data中"""
         for camera_name in self.camera_names:
-            video_path = (
-                self.task_path + f"{episode}/" + camera_name + f".{self.video_type}"
-            )
+            video_path = self.task_path + f"{episode}/" + camera_name + f".{self.video_type}"
             # print(time.time())
             cap = cv2.VideoCapture(video_path)
             # print(time.time())
@@ -274,11 +241,9 @@ class Raw2Hdf5(object):
                 # end_time = time.time()
                 # print("read one image time", end_time - start_time)
                 if ret:
-                    self.data[self.name_obs_images_o + f"/{camera_name}"][
-                        frame_count
-                    ] = frame
+                    self.data[self.name_obs_images_o + f"/{camera_name}"][frame_count] = frame
                     frame_count += 1
-                    now_time = time.time()
+                    # now_time = time.time()
                     # print(f"process one image time {now_time - end_time}")
                 else:
                     # assert (
@@ -310,14 +275,12 @@ class Raw2Hdf5(object):
             states_num=self.states_num,
         )
         end_time = time.time()
-        print(
-            f"episode_{episode}: read data {mid_time - start_time} s and save data {end_time - mid_time} s"
-        )
+        print(f"episode_{episode}: read data {mid_time - start_time} s and save data {end_time - mid_time} s")
 
     def save(self, dir=None, multi_threads=False):
         """Save data to hdf5 for each episode."""
         if multi_threads:
-            threads_list: List[Thread] = []
+            threads_list: list[Thread] = []
             for episode in range(self.start_episode, self.end_episode + 1):
                 thread = Thread(target=self._save_one, args=(episode, dir))
                 threads_list.append(thread)
@@ -329,7 +292,7 @@ class Raw2Hdf5(object):
                 self._save_one(episode, dir)
 
 
-def convert_episode(args: dict, episode_id: Union[int, tuple], multi_threads=None):
+def convert_episode(args: dict, episode_id: int | tuple, multi_threads=None):
     # data path
     root_dir = args.root_dir
     task_name = args.task_name
@@ -392,14 +355,15 @@ def convert_episode(args: dict, episode_id: Union[int, tuple], multi_threads=Non
         datar.save(hdf5_dir)
     except ValueError as e:
         if multi_threads is not None:
-            multi_threads["ok"] =False
+            multi_threads["ok"] = False
         else:
-            raise Exception(f"{e}")
+            raise Exception(f"{e}") from e
+
 
 def convert_episode_multi(args: dict, episodes: tuple):
-    threads_list: List[Thread] = []
+    threads_list: list[Thread] = []
     assert len(episodes) == 2
-    multi_threads_flag = [{"ok":True}] * (episodes[1] - episodes[0] + 1)
+    multi_threads_flag = [{"ok": True}] * (episodes[1] - episodes[0] + 1)
     all_episodes = list(range(episodes[0], episodes[1] + 1))
     for index, episode in enumerate(all_episodes):
         thread = Thread(target=convert_episode, args=(args, episode, multi_threads_flag[index]))
@@ -409,10 +373,10 @@ def convert_episode_multi(args: dict, episodes: tuple):
         t.join()
         all_try = args.try_times
         while not multi_threads_flag[index]["ok"] and all_try > 0:
-           print("尝试重试")  
-           td = Thread(target=convert_episode, args=(args, all_episodes[index], multi_threads_flag[index]))
-           td.join()
-           all_try -= 1
+            print("尝试重试")
+            td = Thread(target=convert_episode, args=(args, all_episodes[index], multi_threads_flag[index]))
+            td.join()
+            all_try -= 1
 
 
 if __name__ == "__main__":
@@ -431,9 +395,7 @@ if __name__ == "__main__":
     parser.add_argument("-se", "--start_episode", type=int, default=0, help="inclusive")
     parser.add_argument("-ee", "--end_episode", type=int, default=1, help="inclusive")
     parser.add_argument("-vt", "--video_type", type=str, default="avi")
-    parser.add_argument(
-        "-mp", "--multi_processing", type=int, default=10, help="use multi processing"
-    )
+    parser.add_argument("-mp", "--multi_processing", type=int, default=10, help="use multi processing")
     parser.add_argument(
         "-mt",
         "--multi_threads",
@@ -441,12 +403,8 @@ if __name__ == "__main__":
         default=5,
         help="use multi threads in each processing",
     )
-    parser.add_argument(
-        "-sd", "--save_dir", type=str, default=f"{os.getcwd()}/demonstrations/hdf5/"
-    )
-    parser.add_argument(
-        "-or", "--other_record", type=str, default="", help="e.g. vel,eff,base"
-    )
+    parser.add_argument("-sd", "--save_dir", type=str, default=f"{os.getcwd()}/demonstrations/hdf5/")
+    parser.add_argument("-or", "--other_record", type=str, default="", help="e.g. vel,eff,base")
     parser.add_argument(
         "-nat",
         "--not_add_task_name",
@@ -479,9 +437,7 @@ if __name__ == "__main__":
     # 若算得每个任务的线程数超过最大线程数，则每个进程线程数为最大线程数，
     # 例如：任务数为10，最大进程数为2，最大线程数为4，则每个进程线程数为4,4,2
     chunk_size = len(episodes_range) // multi_processing
-    chunk_size = (
-        chunk_size + 1 if len(episodes_range) % multi_processing != 0 else chunk_size
-    )
+    chunk_size = chunk_size + 1 if len(episodes_range) % multi_processing != 0 else chunk_size
     chunk_size = args.multi_threads if chunk_size > args.multi_threads else chunk_size
     episodes_chunked = []
     for i in range(0, len(episodes_range), chunk_size):

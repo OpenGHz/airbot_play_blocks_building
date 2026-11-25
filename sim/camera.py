@@ -18,7 +18,6 @@ import sys
 import time
 
 import mujoco
-import numpy as np
 
 from sim import scene
 from sim.driver import DriverError, MujocoDriver

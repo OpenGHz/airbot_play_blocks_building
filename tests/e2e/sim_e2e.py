@@ -67,7 +67,7 @@ PROMPT_FAULT = "按回车回 Home"
 PROMPT_REFILL = "补充物块后按回车"
 STALL_LIMIT = 10.0  # s without an answer from the simulation (connection still open) before the monitor gives up
 LIMIT_BLOCKS = 6  # limit / baseline: blocks before the vertical rise over the tower fails (real robot, old
-                  # model: 7, plan §1.1; the DISCOVERSE model's forearm is 18 mm shorter, so the limit comes a block earlier)
+# model: 7, plan §1.1; the DISCOVERSE model's forearm is 18 mm shorter, so the limit comes a block earlier)
 CLOSED_WIDTH = 0.045  # gripper narrower than this: closed (on a cube ~0.025, empty ~0)
 
 
@@ -85,16 +85,26 @@ class Stack:
 
     def __init__(self, out: pathlib.Path):
         self.out = out
-        self.env = dict(os.environ, ROS_MASTER_URI=f"http://localhost:{free_port()}",
-                        AIRBOT_SIM_SOCKET=str(out / "sim.sock"), PYTHONUNBUFFERED="1")
+        self.env = dict(
+            os.environ,
+            ROS_MASTER_URI=f"http://localhost:{free_port()}",
+            AIRBOT_SIM_SOCKET=str(out / "sim.sock"),
+            PYTHONUNBUFFERED="1",
+        )
         self.procs: dict[str, subprocess.Popen] = {}
         self.text: dict[str, list[str]] = {}
 
     def start(self, name, cmd, cwd=REPO, pipe=False) -> subprocess.Popen:
         log = open(self.out / f"{name}.log", "wb")
-        p = subprocess.Popen(cmd, cwd=cwd, env=self.env, start_new_session=True,
-                             stdin=subprocess.PIPE if pipe else subprocess.DEVNULL,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        p = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            env=self.env,
+            start_new_session=True,
+            stdin=subprocess.PIPE if pipe else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
         self.procs[name] = p
         self.text[name] = []
 
@@ -178,7 +188,9 @@ class Monitor(threading.Thread):
                 b = m.body_parentid[b]
             return False
 
-        self.robot_geoms = [g for g in range(m.ngeom) if under_base(m.geom_bodyid[g]) and m.geom_contype[g] | m.geom_conaffinity[g]]
+        self.robot_geoms = [
+            g for g in range(m.ngeom) if under_base(m.geom_bodyid[g]) and m.geom_contype[g] | m.geom_conaffinity[g]
+        ]
         self.eef = m.body(scene.EEF_BODY).id
         self.fingers = [m.body(n).id for n in scene.FINGER_BODIES]
         self.finger_q = [m.joint(j).qposadr[0] for j in scene.FINGER_JOINTS]
@@ -243,7 +255,9 @@ class Monitor(threading.Thread):
         """The cube between the closed fingers: centre minus end effector (m, base axes) and tilt (deg)."""
         if self.width() >= CLOSED_WIDTH:
             return [math.nan] * 4
-        rel = self.d.xpos[self.cube_ids] - self.d.xpos[self.eef]  # the finger bodies' origins are 2 cm up, at the finger roots
+        rel = (
+            self.d.xpos[self.cube_ids] - self.d.xpos[self.eef]
+        )  # the finger bodies' origins are 2 cm up, at the finger roots
         dist = np.linalg.norm(rel, axis=1)
         if dist.min() > 0.015:
             return [math.nan] * 4
@@ -257,8 +271,11 @@ class Monitor(threading.Thread):
         width = self.width()
         mid = d.xpos[self.fingers].mean(0)
         held = {i for b, i in self.cubes.items() if width < CLOSED_WIDTH and np.linalg.norm(d.xpos[b] - mid) < 0.02}
-        tower = {i: b for b, i in self.cubes.items()
-                 if i not in held and np.linalg.norm(d.xpos[b][:2] - self.tower_world) < 0.03}
+        tower = {
+            i: b
+            for b, i in self.cubes.items()
+            if i not in held and np.linalg.norm(d.xpos[b][:2] - self.tower_world) < 0.03
+        }
         # settled blocks: no robot geom touching them
         touching = set()
         for c in d.contact[: d.ncon]:
@@ -274,11 +291,20 @@ class Monitor(threading.Thread):
             self.log(f"tower: {n} blocks")
             self.tower_count = n
         top = max(tower.values(), key=lambda b: d.xpos[b][2], default=None)
-        in_zone = top is not None and np.linalg.norm(eef[:2] - (d.xpos[top][:2] - self.base[:2])) < 0.02 \
+        in_zone = (
+            top is not None
+            and np.linalg.norm(eef[:2] - (d.xpos[top][:2] - self.base[:2])) < 0.02
             and eef[2] < d.xpos[top][2] - self.base[2] + self.h / 2 + self.h + 0.02
+        )
         if not in_zone and touching:
-            names = sorted({m.geom(g).name or m.body(m.geom_bodyid[g]).name for c in d.contact[: d.ncon]
-                            for g in (c.geom1, c.geom2) if g in self.robot_geoms})
+            names = sorted(
+                {
+                    m.geom(g).name or m.body(m.geom_bodyid[g]).name
+                    for c in d.contact[: d.ncon]
+                    for g in (c.geom1, c.geom2)
+                    if g in self.robot_geoms
+                }
+            )
             self.contacts.append((round(t, 2), names, sorted(touching)))
         moved = []
         for i in list(self.ref):
@@ -294,7 +320,11 @@ class Monitor(threading.Thread):
                 self.ref[i] = (d.xpos[tower[i]].copy(), self._yaw(tower[i]))
         if moved:
             recent = [c for c in self.contacts if c[0] > t - 2.0]
-            self.log("tower disturbed: " + "; ".join(moved) + (f" (arm touched the tower: {recent[-1][1]})" if recent else " (no arm contact)"))
+            self.log(
+                "tower disturbed: "
+                + "; ".join(moved)
+                + (f" (arm touched the tower: {recent[-1][1]})" if recent else " (no arm contact)")
+            )
         if check_clearance and tower and not in_zone:
             arm = list(self.robot_geoms) + [self.cube_geom[i] for i in held]
             tower_geoms = [self.cube_geom[i] for i in tower]
@@ -308,8 +338,14 @@ class Monitor(threading.Thread):
                     if dist < best[0]:
                         best = (dist, g, gt)
             if best[1] is not None:
-                self.clearance.append((t, float(best[0]), m.geom(best[1]).name or m.body(m.geom_bodyid[best[1]]).name,
-                                       m.geom(best[2]).name))
+                self.clearance.append(
+                    (
+                        t,
+                        float(best[0]),
+                        m.geom(best[1]).name or m.body(m.geom_bodyid[best[1]]).name,
+                        m.geom(best[2]).name,
+                    )
+                )
 
     def _yaw(self, b):
         r = self.d.xmat[b].reshape(3, 3)
@@ -324,9 +360,11 @@ class Monitor(threading.Thread):
         xy = np.array([p[:2] for p in pos])
         from_bottom = np.linalg.norm(xy - xy[0], axis=1) * 1000
         steps = np.linalg.norm(np.diff(xy, axis=0), axis=1) * 1000
-        return {"offset_from_bottom_mm": [round(float(v), 1) for v in from_bottom],
-                "max_step_mm": round(float(steps.max()), 1),
-                "xy_base": [[round(float(v), 5) for v in p - self.base[:2]] for p in xy]}  # bottom to top, base frame (m)
+        return {
+            "offset_from_bottom_mm": [round(float(v), 1) for v in from_bottom],
+            "max_step_mm": round(float(steps.max()), 1),
+            "xy_base": [[round(float(v), 5) for v in p - self.base[:2]] for p in xy],
+        }  # bottom to top, base frame (m)
 
     def stationary_for(self) -> float:
         """Seconds the arm joints have not moved."""
@@ -377,7 +415,7 @@ class Monitor(threading.Thread):
 
     @staticmethod
     def _transfer(kind, t, p, v, a, b) -> dict:
-        rest = v[a:b + 1] < 0.003
+        rest = v[a : b + 1] < 0.003
         stops, j = [], 0
         while j < len(rest):
             if rest[j]:
@@ -385,15 +423,25 @@ class Monitor(threading.Thread):
                 while k < len(rest) and rest[k]:
                     k += 1
                 i0, i1 = a + j, a + k - 1
-                where = p[i0:i1 + 1].mean(0)
+                where = p[i0 : i1 + 1].mean(0)
                 if t[i1] - t[i0] >= 0.2 and np.linalg.norm(where - p[a]) > 0.02 and np.linalg.norm(where - p[b]) > 0.02:
-                    stops.append({"t": round(float(t[i0]), 1), "seconds": round(float(t[i1] - t[i0]), 2),
-                                  "at": [round(float(x), 3) for x in where]})
+                    stops.append(
+                        {
+                            "t": round(float(t[i0]), 1),
+                            "seconds": round(float(t[i1] - t[i0]), 2),
+                            "at": [round(float(x), 3) for x in where],
+                        }
+                    )
                 j = k
             else:
                 j += 1
-        return {"kind": kind, "t0": round(float(t[a]), 1), "t1": round(float(t[b]), 1),
-                "seconds": round(float(t[b] - t[a]), 1), "stops": stops}
+        return {
+            "kind": kind,
+            "t0": round(float(t[a]), 1),
+            "t1": round(float(t[b]), 1),
+            "seconds": round(float(t[b] - t[a]), 1),
+            "stops": stops,
+        }
 
 
 # --------------------------------------------------------------------------------------
@@ -403,21 +451,38 @@ def old_worktree() -> pathlib.Path:
     path = REPO / "runs/e2e" / f"old-{OLD_COMMIT}"
     if not (path / "airbot_play_pick_place.py").exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["git", "worktree", "add", "--detach", str(path), OLD_COMMIT], cwd=REPO, check=True,
-                       capture_output=True)
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", str(path), OLD_COMMIT], cwd=REPO, check=True, capture_output=True
+        )
     return path
 
 
-def run(name: str, scene_name: str, env_type: str, program: str = "new", vision: str = "camera",
-        record: bool = False, out: pathlib.Path | None = None, policy=None, timeout: float = 900.0,
-        args: tuple = (), vision_args: tuple = ()) -> dict:
+def run(
+    name: str,
+    scene_name: str,
+    env_type: str,
+    program: str = "new",
+    vision: str = "camera",
+    record: bool = False,
+    out: pathlib.Path | None = None,
+    policy=None,
+    timeout: float = 900.0,
+    args: tuple = (),
+    vision_args: tuple = (),
+) -> dict:
     out = out or REPO / "runs/e2e" / f"{name}_{time.strftime('%Y%m%d_%H%M%S')}"
     out.mkdir(parents=True, exist_ok=True)
     cfg = scene.load_config(scene_name)
     control = config_file.load(REPO / f"configs/control/{env_type}.yaml")
     stack = Stack(out)
-    report = {"scenario": name, "scene": scene_name, "control": env_type, "program": program,
-              "vision": " ".join([vision, *vision_args]), "out": str(out.relative_to(REPO))}
+    report = {
+        "scenario": name,
+        "scene": scene_name,
+        "control": env_type,
+        "program": program,
+        "vision": " ".join([vision, *vision_args]),
+        "out": str(out.relative_to(REPO)),
+    }
     print(f"[e2e] {name}: logs in {report['out']}", flush=True)
     monitor = None
     try:
@@ -438,8 +503,19 @@ def run(name: str, scene_name: str, env_type: str, program: str = "new", vision:
         stack.rosparam("set", "/control_param1", 90)
         stack.rosparam("set", "/control_param2", 100)
         if vision == "camera":
-            stack.start("vision", [sys.executable, "Best_Contour.py", "-cfg", "./configs/vision/sim.yaml",
-                                   "-vd", "/camera/color/image_raw", "-ns", *vision_args])
+            stack.start(
+                "vision",
+                [
+                    sys.executable,
+                    "Best_Contour.py",
+                    "-cfg",
+                    "./configs/vision/sim.yaml",
+                    "-vd",
+                    "/camera/color/image_raw",
+                    "-ns",
+                    *vision_args,
+                ],
+            )
             if not stack.wait_for("vision", "开始获取图像", 60):
                 raise RuntimeError("the vision did not start (vision.log)")
         else:
@@ -480,9 +556,15 @@ def run(name: str, scene_name: str, env_type: str, program: str = "new", vision:
     report["log_tail"] = [ln for ln in log.splitlines() if ln.strip()][-6:]
     if monitor is not None:
         if monitor.samples:  # raw data, to look at a run again without repeating it
-            np.savez_compressed(out / "samples.npz", t=[x[0] for x in monitor.samples], eef=[x[1] for x in monitor.samples],
-                                width=[x[2] for x in monitor.samples], clearance=np.array([c[:2] for c in monitor.clearance]),
-                                held=np.array(monitor.held), qpos=np.array(monitor.qpos))
+            np.savez_compressed(
+                out / "samples.npz",
+                t=[x[0] for x in monitor.samples],
+                eef=[x[1] for x in monitor.samples],
+                width=[x[2] for x in monitor.samples],
+                clearance=np.array([c[:2] for c in monitor.clearance]),
+                held=np.array(monitor.held),
+                qpos=np.array(monitor.qpos),
+            )
         scan = np.array([control["PICK_POSITION_X"], control["PICK_POSITION_Y"], control["PICK_POSITION_Z"]])
         report["events"] = monitor.events
         report["tower_disturbed"] = [e for e in monitor.events if "tower disturbed" in e[1]]
@@ -503,6 +585,7 @@ def stop_after(blocks: int):
             st["stopped"] = True
             return True
         return False
+
     return policy
 
 
@@ -517,6 +600,7 @@ def answer_enter(stack, mon, st):
 def detect_freeze(seconds: float = 25.0, need_blocks: bool = True):
     """Arm still for `seconds` without a prompt, after building started (or, with need_blocks
     False, after the arm first moved: with a zero vision offset nothing ends up on the tower)."""
+
     def policy(stack, mon, st):
         started = mon.tower_count >= 1 if need_blocks else any(x[3] for x in mon.samples)
         if started and mon.stationary_for() > seconds and PROMPT_FAULT not in stack.output("pick_place"):
@@ -524,6 +608,7 @@ def detect_freeze(seconds: float = 25.0, need_blocks: bool = True):
             st["freeze_after_blocks"] = mon.tower_count
             return True
         return answer_enter(stack, mon, st)
+
     return policy
 
 
@@ -543,6 +628,7 @@ def kill_sim_during(block: int, watch: float = 60.0):
         if PROMPT_FAULT in stack.output("pick_place") and "prompt_after_s" not in st:
             st["prompt_after_s"] = round(elapsed, 1)
         return elapsed > watch
+
     return policy
 
 
@@ -555,6 +641,7 @@ def load_motion(path: pathlib.Path) -> list[dict]:
 
 def compare(old: list[dict], new: list[dict]) -> dict:
     """Same gripper commands at the same poses (grasp and release heights, every layer)?"""
+
     def grips(ev):
         return [e for e in ev if e["ev"] == "gripper"]
 
@@ -566,7 +653,9 @@ def compare(old: list[dict], new: list[dict]) -> dict:
         if a["cmd"] != b["cmd"]:
             diffs.append(f"gripper command {i}: old {a['cmd']}, new {b['cmd']}")
         elif max(abs(x - y) for x, y in zip(a["xyz"], b["xyz"])) > 1e-5:
-            diffs.append(f"gripper command {i} ({'close' if a['cmd'] else 'open'}): old at {a['xyz']}, new at {b['xyz']}")
+            diffs.append(
+                f"gripper command {i} ({'close' if a['cmd'] else 'open'}): old at {a['xyz']}, new at {b['xyz']}"
+            )
 
     def segments(ev):
         """Motion events between gripper commands."""
@@ -594,39 +683,62 @@ def compare(old: list[dict], new: list[dict]) -> dict:
     so, sn = segments(old), segments(new)
     table = []
     for i in range(max(len(so), len(sn))):
-        table.append({"after_gripper_command": i, "old": [fmt(e) for e in (so[i] if i < len(so) else [])],
-                      "new": [fmt(e) for e in (sn[i] if i < len(sn) else [])]})
-    return {"gripper_commands": {"old": len(go), "new": len(gn)}, "same_grasp_and_release_poses": not diffs,
-            "differences": diffs, "moves": table}
+        table.append(
+            {
+                "after_gripper_command": i,
+                "old": [fmt(e) for e in (so[i] if i < len(so) else [])],
+                "new": [fmt(e) for e in (sn[i] if i < len(sn) else [])],
+            }
+        )
+    return {
+        "gripper_commands": {"old": len(go), "new": len(gn)},
+        "same_grasp_and_release_poses": not diffs,
+        "differences": diffs,
+        "moves": table,
+    }
 
 
 # --------------------------------------------------------------------------------------
 def summary(r: dict, tower: bool = True) -> str:
-    lines = [f"== {r['scenario']} ({r['program']} program, {r['scene']} scene, {r['control']}.yaml, vision {r['vision']})"]
+    lines = [
+        f"== {r['scenario']} ({r['program']} program, {r['scene']} scene, {r['control']}.yaml, vision {r['vision']})"
+    ]
     if r.get("error"):
         lines.append(f"   ERROR: {r['error']}")
-    lines.append(f"   blocks on the tower: {r.get('blocks')}; pick-place exit status: {r.get('pick_place_exit')}"
-                 + ("; TIMEOUT" if r.get("timeout") else ""))
+    lines.append(
+        f"   blocks on the tower: {r.get('blocks')}; pick-place exit status: {r.get('pick_place_exit')}"
+        + ("; TIMEOUT" if r.get("timeout") else "")
+    )
     if r.get("freeze"):
-        lines.append(f"   froze after {r.get('freeze_after_blocks')} blocks (arm still for 25 s, no prompt); "
-                     f"bad callback in the log: {r.get('bad_callback')}")
+        lines.append(
+            f"   froze after {r.get('freeze_after_blocks')} blocks (arm still for 25 s, no prompt); "
+            f"bad callback in the log: {r.get('bad_callback')}"
+        )
     if r.get("fault_prompts"):
         lines.append(f"   failure prompts: {r['fault_prompts']}; {r.get('built_line')}")
     if r.get("killed_sim"):
-        lines.append(f"   killed the simulation; prompt after {r.get('prompt_after_s')} s; "
-                     f"pick-place ended after {r.get('pick_place_ended_after_s')} s")
+        lines.append(
+            f"   killed the simulation; prompt after {r.get('prompt_after_s')} s; "
+            f"pick-place ended after {r.get('pick_place_ended_after_s')} s"
+        )
     if not tower:
         lines.append("   last lines: " + " | ".join(r.get("log_tail", [])[-3:]))
         return "\n".join(lines)
-    lines.append(f"   tower disturbed: {len(r.get('tower_disturbed') or [])}"
-                 + "".join(f"\n     {e[0]} s {e[1]}" for e in (r.get("tower_disturbed") or [])))
+    lines.append(
+        f"   tower disturbed: {len(r.get('tower_disturbed') or [])}"
+        + "".join(f"\n     {e[0]} s {e[1]}" for e in (r.get("tower_disturbed") or []))
+    )
     if r.get("tower_alignment"):
         a = r["tower_alignment"]
-        lines.append(f"   tower alignment: largest step between layers {a['max_step_mm']} mm; "
-                     f"offset from the bottom block, bottom to top (mm): {a['offset_from_bottom_mm']}")
+        lines.append(
+            f"   tower alignment: largest step between layers {a['max_step_mm']} mm; "
+            f"offset from the bottom block, bottom to top (mm): {a['offset_from_bottom_mm']}"
+        )
     if "transfers" in r:
-        lines.append(f"   transfers: {len(r['transfers'])}, stops in the middle: {r['stops_in_transfers']}; "
-                     f"smallest arm-tower distance while transferring: {r['min_clearance_mm']} mm {r.get('min_clearance_at') or ''}")
+        lines.append(
+            f"   transfers: {len(r['transfers'])}, stops in the middle: {r['stops_in_transfers']}; "
+            f"smallest arm-tower distance while transferring: {r['min_clearance_mm']} mm {r.get('min_clearance_at') or ''}"
+        )
         for tr in r["transfers"]:
             if tr["stops"]:
                 lines.append(f"     {tr['kind']} at {tr['t0']} s ({tr['seconds']} s): stops {tr['stops']}")
@@ -635,13 +747,21 @@ def summary(r: dict, tower: bool = True) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
-                                 epilog=__doc__.split("\n\n", 1)[1])
+    ap = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__.split("\n\n", 1)[1],
+    )
     ap.add_argument("scenario", choices=["floor", "open-place", "held-cube", "limit", "baseline", "kill-sim", "golden"])
     ap.add_argument("--blocks", type=int, default=6, help="floor, open-place, held-cube: stop after this many blocks")
-    ap.add_argument("--place-stop", type=float, metavar="PX", help="floor, held-cube: run the program with --place-stop PX")
-    ap.add_argument("--no-scene", action="store_true", help="floor, open-place, held-cube, limit, golden: run the program "
-                                                             "with --no-scene (the old fixed waypoints)")
+    ap.add_argument(
+        "--place-stop", type=float, metavar="PX", help="floor, held-cube: run the program with --place-stop PX"
+    )
+    ap.add_argument(
+        "--no-scene",
+        action="store_true",
+        help="floor, open-place, held-cube, limit, golden: run the program with --no-scene (the old fixed waypoints)",
+    )
     args = ap.parse_args()
     no_scene = ("--no-scene",) if args.no_scene else ()
     suffix = "-noscene" if args.no_scene else ""
@@ -651,33 +771,63 @@ def main() -> int:
         if args.place_stop is not None and args.scenario != "open-place":
             extra, name = ("--place-stop", str(args.place_stop)), f"{args.scenario}-stop{args.place_stop:g}"
         vision_extra = ("--held-cube",) if args.scenario == "held-cube" else ()
-        r = run(name + suffix, "floor", "sim", policy=stop_after(args.blocks), args=extra + no_scene, vision_args=vision_extra)
+        r = run(
+            name + suffix,
+            "floor",
+            "sim",
+            policy=stop_after(args.blocks),
+            args=extra + no_scene,
+            vision_args=vision_extra,
+        )
         # exit 0 after the Ctrl+C that ends the run: it used to abort now and then (-6) when a MoveIt call
         # returned while Python shut down (the end of airbot_play_pick_place.py)
-        ok = r["blocks"] >= args.blocks and not r["tower_disturbed"] and (args.no_scene or r["stops_in_transfers"] == 0) \
+        ok = (
+            r["blocks"] >= args.blocks
+            and not r["tower_disturbed"]
+            and (args.no_scene or r["stops_in_transfers"] == 0)
             and r["pick_place_exit"] == 0
+        )
     elif args.scenario == "limit":
         r = run("limit" + suffix, "tabletop", "real", policy=answer_enter, args=no_scene)
-        ok = r["pick_place_exit"] == 0 and r["fault_prompts"] == 1 and r["blocks"] == LIMIT_BLOCKS and not r["tower_disturbed"]
+        ok = (
+            r["pick_place_exit"] == 0
+            and r["fault_prompts"] == 1
+            and r["blocks"] == LIMIT_BLOCKS
+            and not r["tower_disturbed"]
+        )
     elif args.scenario == "baseline":
         r = run("baseline", "tabletop", "real", program="old", policy=detect_freeze())
         ok = bool(r.get("freeze")) and r["bad_callback"] and r.get("freeze_after_blocks") == LIMIT_BLOCKS
     elif args.scenario == "kill-sim":
         r = run("kill-sim", "floor", "sim", policy=kill_sim_during(3))
-        ok = bool(r.get("killed_sim")) and r.get("pick_place_ended_after_s") is not None and r["pick_place_exit"] not in (0, None)
+        ok = (
+            bool(r.get("killed_sim"))
+            and r.get("pick_place_ended_after_s") is not None
+            and r["pick_place_exit"] not in (0, None)
+        )
     else:
         stamp = time.strftime("%Y%m%d_%H%M%S")
         base = REPO / "runs/e2e" / f"golden{suffix}_{stamp}"
         runs = {}
         for program in ("old", "new"):
-            runs[program] = run(f"golden-{program}", "tabletop", "real", program=program, vision="zero", record=True,
-                                out=base / program, policy=detect_freeze(15, need_blocks=False),
-                                args=no_scene if program == "new" else ())
+            runs[program] = run(
+                f"golden-{program}",
+                "tabletop",
+                "real",
+                program=program,
+                vision="zero",
+                record=True,
+                out=base / program,
+                policy=detect_freeze(15, need_blocks=False),
+                args=no_scene if program == "new" else (),
+            )
             print(summary(runs[program], tower=False), flush=True)
         cmp = compare(load_motion(base / "old/motion.jsonl"), load_motion(base / "new/motion.jsonl"))
         (base / "compare.json").write_text(json.dumps(cmp, ensure_ascii=False, indent=1))
-        print(f"== golden: gripper commands old {cmp['gripper_commands']['old']}, new {cmp['gripper_commands']['new']}; "
-              f"same grasp and release poses: {cmp['same_grasp_and_release_poses']}")
+        print(
+            f"== golden: gripper commands old {cmp['gripper_commands']['old']}, new {cmp['gripper_commands']['new']}; "
+            f"same grasp and release poses: {cmp['same_grasp_and_release_poses']}"
+        )
         for d in cmp["differences"]:
             print("   ", d)
         print(f"   moves side by side: {(base / 'compare.json').relative_to(REPO)}")

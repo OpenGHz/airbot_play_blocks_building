@@ -109,8 +109,10 @@ def table_rect(cfg: dict):
     if mount == "front":
         x1 = cfg.get("BASE_FRONT", front)
         if x1 < front - 1e-9:
-            raise ValueError(f"BASE_FRONT {x1} m: the base plate reaches {front:.4f} m in front of the base centre, "
-                             "it would overhang the table edge")
+            raise ValueError(
+                f"BASE_FRONT {x1} m: the base plate reaches {front:.4f} m in front of the base centre, "
+                "it would overhang the table edge"
+            )
         return (x1 - depth, x1, -width / 2, width / 2), (1.0, 0.0)
     raise ValueError(f"MOUNT must be side or front, not {mount!r}")
 
@@ -159,10 +161,7 @@ def robot_spec(cfg: dict) -> mujoco.MjSpec:
     text = text.replace("package://airbot_play_v3_gripper/meshes/", "")
     text = re.sub(r"<gazebo.*?</gazebo>", "", text, flags=re.S)
     text = re.sub(r"<transmission.*?</transmission>", "", text, flags=re.S)
-    compiler = (
-        f'<mujoco><compiler meshdir="{MESH_DIR}" discardvisual="false" '
-        'fusestatic="false"/></mujoco>'
-    )
+    compiler = f'<mujoco><compiler meshdir="{MESH_DIR}" discardvisual="false" fusestatic="false"/></mujoco>'
     text = re.sub(r"(<robot[^>]*>)", r"\1" + compiler, text, count=1)
     spec = mujoco.MjSpec.from_string(text)
 
@@ -174,9 +173,7 @@ def robot_spec(cfg: dict) -> mujoco.MjSpec:
         joint.armature = 0.01
 
     cam = cfg["CAMERA"]
-    mount = spec.body(cam["PARENT"]).add_body(
-        name="eye_mount", pos=cam["POS"], quat=euler_xyz_to_quat(cam["EULER"])
-    )
+    mount = spec.body(cam["PARENT"]).add_body(name="eye_mount", pos=cam["POS"], quat=euler_xyz_to_quat(cam["EULER"]))
     mount.add_camera(name="eye", fovy=cam["FOVY"])
     # A small box behind the lens stands in for the USB camera housing, so the
     # reach analysis does not let the camera scrape the table edge.
@@ -245,7 +242,7 @@ def _env_xml(cfg: dict, table_height: float, physics: bool = False) -> str:
         for i, color in enumerate(pool_colors(cfg)):
             rgba = " ".join(map(str, cfg["CUBE_COLORS"][color]))
             x, y = pool_park_xy(i)
-            solref = f'{cfg.get("CONTACT_TIMECONST", CONTACT_TIMECONST)} 1'
+            solref = f"{cfg.get('CONTACT_TIMECONST', CONTACT_TIMECONST)} 1"
             cubes += _cube_xml(f"cube_{i}", (x, y, s), rgba, s, cfg["CUBE_MASS"], solref)
     else:
         z0 = 0.0 if pick_on_floor(cfg) else h
@@ -360,7 +357,11 @@ def build_physics(cfg: dict | None = None):
     for body in FINGER_BODIES:
         bid = model.body(body).id
         for g in range(model.ngeom):
-            if model.geom_bodyid[g] != bid or model.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH or not model.geom_contype[g]:
+            if (
+                model.geom_bodyid[g] != bid
+                or model.geom_type[g] != mujoco.mjtGeom.mjGEOM_MESH
+                or not model.geom_contype[g]
+            ):
                 continue
             mid = model.geom_dataid[g]
             v = model.mesh_vert[model.mesh_vertadr[mid] : model.mesh_vertadr[mid] + model.mesh_vertnum[mid]]

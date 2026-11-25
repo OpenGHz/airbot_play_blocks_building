@@ -94,13 +94,24 @@ def main() -> int:
         if eye is not None:
             eye.update_scene(data, camera="eye")
             w = width // 4
-            small = cv2.resize(cv2.cvtColor(eye.render(), cv2.COLOR_RGB2BGR), (w, w * eye.height // eye.width),
-                               interpolation=cv2.INTER_AREA)
+            small = cv2.resize(
+                cv2.cvtColor(eye.render(), cv2.COLOR_RGB2BGR),
+                (w, w * eye.height // eye.width),
+                interpolation=cv2.INTER_AREA,
+            )
             m = 12
             img[m : m + small.shape[0], width - m - w : width - m] = small
             cv2.rectangle(img, (width - m - w - 1, m - 1), (width - m, m + small.shape[0]), (255, 255, 255), 2)
-            cv2.putText(img, "wrist camera", (width - m - w + 6, m + small.shape[0] - 8),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(
+                img,
+                "wrist camera",
+                (width - m - w + 6, m + small.shape[0] - 8),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
         n = tower_count()
         mm, ss = divmod(int(t), 60)
         for text, y in ((f"blocks on tower: {n}", 36), (f"t = {mm:02d}:{ss:02d}", 68)):
@@ -121,7 +132,10 @@ def main() -> int:
     signal.signal(signal.SIGINT, lambda *_: stop.append(1))
     signal.signal(signal.SIGTERM, lambda *_: stop.append(1))
     t0 = time.time()
-    print(f"[sim record] 写入 {out}（{width}x{height}@{args.fps:.0f}，开始于 {time.strftime('%H:%M:%S', time.localtime(t0))}）；Ctrl+C 结束", flush=True)
+    print(
+        f"[sim record] 写入 {out}（{width}x{height}@{args.fps:.0f}，开始于 {time.strftime('%H:%M:%S', time.localtime(t0))}）；Ctrl+C 结束",
+        flush=True,
+    )
     period = 1.0 / args.fps
     k = 0
     try:

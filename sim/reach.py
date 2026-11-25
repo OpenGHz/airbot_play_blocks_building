@@ -156,7 +156,9 @@ def rival(arm, q, targets, others, cfg, vision, stage, margin_px=40):
     for p in others:
         d = dist(p)
         if d is not None and d < far + margin_px:
-            return f"block at {tuple(round(float(v), 2) for v in p)} is {d:.0f} px from the reference, target {far:.0f} px"
+            return (
+                f"block at {tuple(round(float(v), 2) for v in p)} is {d:.0f} px from the reference, target {far:.0f} px"
+            )
     return None
 
 
@@ -185,8 +187,14 @@ class Planner:
         # Floor far below: only the table and legs matter, plus a box standing in for the tower
         # (moved and resized per check, never collides).
         spec = scene.build_spec(cfg, self.h_hi)
-        spec.worldbody.add_geom(name="tower_obstacle", type=mujoco.mjtGeom.mjGEOM_BOX, size=[0.01] * 3,
-                                pos=[10.0, 10.0, 0.01], contype=0, conaffinity=0)
+        spec.worldbody.add_geom(
+            name="tower_obstacle",
+            type=mujoco.mjtGeom.mjGEOM_BOX,
+            size=[0.01] * 3,
+            pos=[10.0, 10.0, 0.01],
+            contype=0,
+            conaffinity=0,
+        )
         model = spec.compile()
         self.arm = kin.Arm(model, mujoco.MjData(model), scene.base_offset(cfg, self.h_hi), kin.limit_margin(cfg))
         self.tower_geom = model.geom("tower_obstacle").id
@@ -340,8 +348,10 @@ class Planner:
             # dip below the travel height; elsewhere it must stay above the floor grasp height.
             near = np.hypot(path[:, 0] - tx, path[:, 1] - ty) < 0.06
             if k and path[near, 2].min() < z - self.gap:
-                return (f"carry for block {k + 1}: dips {1000 * (z - path[near, 2].min()):.0f} mm "
-                        f"below the travel height over the tower")
+                return (
+                    f"carry for block {k + 1}: dips {1000 * (z - path[near, 2].min()):.0f} mm "
+                    f"below the travel height over the tower"
+                )
             if path[:, 2].min() < z_first:
                 return f"carry for block {k + 1}: goes below the floor grasp height"
         return None
@@ -358,15 +368,12 @@ def run(cfg, control, vision, clearance=0.01, margin=0.01, verbose=False, log=pr
 
     pl = Planner(cfg, control, vision, clearance, margin)
     towers, picks = pl.towers(), pl.picks()
-    log(f"scene '{cfg['NAME']}', MOUNT {cfg.get('MOUNT', 'side')}: pick area on the "
+    log(
+        f"scene '{cfg['NAME']}', MOUNT {cfg.get('MOUNT', 'side')}: pick area on the "
         f"{'floor' if pl.floor_pick else 'table top'}, tower on the floor; "
-        f"{len(towers)} tower spots x {len(picks)} pick spots")
-    cands = [
-        {"tower": t, "pick": p, "full": False}
-        for t in towers
-        for p in picks
-        if math.dist(t, p) >= MIN_SEPARATION
-    ]
+        f"{len(towers)} tower spots x {len(picks)} pick spots"
+    )
+    cands = [{"tower": t, "pick": p, "full": False} for t in towers for p in picks if math.dist(t, p) >= MIN_SEPARATION]
     for c in cands:
         pl.plan(c)
     if verbose:
@@ -374,8 +381,10 @@ def run(cfg, control, vision, clearance=0.01, margin=0.01, verbose=False, log=pr
             for xy in spots:
                 e = pl.ext(xy)
                 if e:
-                    log(f"  {label:5s} ({xy[0]:+.3f}, {xy[1]:+.3f}) z {e['z_min']:+.3f} ~ {e['z_max']:+.3f}, "
-                        f"gap {e['min_clear'] * 1000:.0f} mm, {e['why']}")
+                    log(
+                        f"  {label:5s} ({xy[0]:+.3f}, {xy[1]:+.3f}) z {e['z_min']:+.3f} ~ {e['z_max']:+.3f}, "
+                        f"gap {e['min_clear'] * 1000:.0f} mm, {e['why']}"
+                    )
 
     def key(c):
         t = pl.ext(c["tower"])
@@ -434,9 +443,11 @@ def main():
         cfg["MOUNT"] = args.mount
     control = config_file.load(args.control)
     vision = config_file.load(args.vision)
-    print(f"gripper down; clearance >= {args.clearance * 1000:.0f} mm to the table top, columns and feet; "
-          f"joints kept {cfg.get('JOINT_LIMIT_MARGIN_DEG', 2.0)}° inside their limits; "
-          f"table {cfg['TABLE_HEIGHT_RANGE'][0]:.2f} ~ {cfg['TABLE_HEIGHT_RANGE'][1]:.2f} m")
+    print(
+        f"gripper down; clearance >= {args.clearance * 1000:.0f} mm to the table top, columns and feet; "
+        f"joints kept {cfg.get('JOINT_LIMIT_MARGIN_DEG', 2.0)}° inside their limits; "
+        f"table {cfg['TABLE_HEIGHT_RANGE'][0]:.2f} ~ {cfg['TABLE_HEIGHT_RANGE'][1]:.2f} m"
+    )
     best, rejected, pl = run(cfg, control, vision, args.clearance, args.margin, args.verbose)
 
     if rejected:
@@ -449,23 +460,31 @@ def main():
     t, h = pl.ext(best["tower"]), pl.h
     H, n = best["H"], best["n"]
     bearing = lambda xy: math.degrees(math.atan2(xy[1], xy[0]))  # noqa: E731
-    print(f"\nbest tower spot: {best['tower']}  (r {math.hypot(*best['tower']):.2f} m, bearing "
-          f"{bearing(best['tower']):.0f}°; z {t['z_min']:+.3f} ~ {t['z_max']:+.3f}; "
-          f"min gap to table/legs {t['min_clear'] * 1000:.0f} mm)")
+    print(
+        f"\nbest tower spot: {best['tower']}  (r {math.hypot(*best['tower']):.2f} m, bearing "
+        f"{bearing(best['tower']):.0f}°; z {t['z_min']:+.3f} ~ {t['z_max']:+.3f}; "
+        f"min gap to table/legs {t['min_clear'] * 1000:.0f} mm)"
+    )
     lows = [pl.ext(xy)["z_min"] for xy in pl.cube_xys(best["pick"])]
-    print(f"best pick-area centre: {best['pick']}  (bearing {bearing(best['pick']):.0f}°, "
-          f"{math.dist(best['tower'], best['pick']):.2f} m from the tower"
-          + (f"; lowest reach over its cubes {max(lows):+.3f})" if pl.floor_pick else ")"))
+    print(
+        f"best pick-area centre: {best['pick']}  (bearing {bearing(best['pick']):.0f}°, "
+        f"{math.dist(best['tower'], best['pick']):.2f} m from the tower"
+        + (f"; lowest reach over its cubes {max(lows):+.3f})" if pl.floor_pick else ")")
+    )
     print(f"best starting table height: {H:.3f} m  (block 1 released at z = {pl.grasp - H:+.3f})")
     print(f"blocks at this height without lifting: {n}  (tower top {n * h:.3f} m above the floor)")
     if pl.floor_pick:
-        print(f"the table cannot be raised while building (the pick area on the floor would go out of reach): "
-              f"{n} blocks in total")
+        print(
+            f"the table cannot be raised while building (the pick area on the floor would go out of reach): "
+            f"{n} blocks in total"
+        )
     else:
         p = pl.ext(best["pick"])
         total = layers_for(pl.grasp - pl.h_hi, t["z_max"], p["z_max"], h, pl.gap, args.margin)
-        print(f"raising the table to {pl.h_hi:.2f} m: {total} blocks in total "
-              f"(tower top {total * h:.3f} m above the floor)")
+        print(
+            f"raising the table to {pl.h_hi:.2f} m: {total} blocks in total "
+            f"(tower top {total * h:.3f} m above the floor)"
+        )
     if args.apply:
         values = {"TABLE_HEIGHT": H, "TOWER_XY": list(best["tower"]), "PICK_XY": list(best["pick"])}
         if args.mount:

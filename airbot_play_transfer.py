@@ -43,8 +43,16 @@ class TransferError(RuntimeError):
 class TowerScene:
     """Floor, tower and held cube in the MoveIt planning scene."""
 
-    def __init__(self, ns: str, frame: str, floor_z: float, tower_bottom_z: float, cube: float,
-                 lean_axis=(1.0, 0.0), lean: float = 0.0):
+    def __init__(
+        self,
+        ns: str,
+        frame: str,
+        floor_z: float,
+        tower_bottom_z: float,
+        cube: float,
+        lean_axis=(1.0, 0.0),
+        lean: float = 0.0,
+    ):
         """lean_axis: the finger gap at the place orientation (slot_axis); lean: how far the tower may
         lean each way along it (m)."""
         self.psi = PlanningSceneInterface(ns=ns, synchronous=True)
@@ -74,8 +82,9 @@ class TowerScene:
         z = self.floor_z - t / 2
         a, h = FLOOR_HALF, FLOOR_HOLE
         w = a - h
-        for i, (x, y, sx, sy) in enumerate(((h + w / 2, 0, w, 2 * a), (-h - w / 2, 0, w, 2 * a),
-                                            (0, h + w / 2, 2 * h, w), (0, -h - w / 2, 2 * h, w))):
+        for i, (x, y, sx, sy) in enumerate(
+            ((h + w / 2, 0, w, 2 * a), (-h - w / 2, 0, w, 2 * a), (0, h + w / 2, 2 * h, w), (0, -h - w / 2, 2 * h, w))
+        ):
             self.psi.add_box(f"floor_{i}", self._pose(x, y, z), (sx, sy, t))
 
     def set_tower(self, n: int, xy=None, max_top: float | None = None):
@@ -208,7 +217,9 @@ class Transfer:
                     continue  # a segment starts where the previous one ended
                 points.append(JointTrajectoryPoint(positions=list(p.positions)))
         joined.joint_trajectory.points = points
-        timed = self.g.retime_trajectory(self.state(start), joined, vel, acc, algorithm="iterative_time_parameterization")
+        timed = self.g.retime_trajectory(
+            self.state(start), joined, vel, acc, algorithm="iterative_time_parameterization"
+        )
         self.g.stop()
         if not self.g.execute(timed, wait=True):
             raise TransferError("轨迹执行失败")
@@ -226,4 +237,3 @@ class Transfer:
 
 def _fmt(xyz) -> str:
     return "(" + ", ".join(f"{v:+.3f}" for v in xyz) + ")"
-

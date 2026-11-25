@@ -50,5 +50,4 @@ def compute(cfg: dict, control: dict, table_height: float | None = None, margin:
     z_last = z_first + (layers - 1) * h
     q_last = arm.ik([xy[0], xy[1], z_last], seed=_closest(tower["down"] + tower["up"], z_last), restarts=0)
     poses["top"] = (q_last, hold, [xy[0], xy[1], z_last - 0.0025])
-    return {"poses": poses, "layers": layers, "z_first": z_first, "z_max": tower["z_max"],
-            "table_height": h_table}
+    return {"poses": poses, "layers": layers, "z_first": z_first, "z_max": tower["z_max"], "table_height": h_table}

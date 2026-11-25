@@ -1,6 +1,7 @@
-import os
 import argparse
+import os
 import time
+
 import h5py
 
 
@@ -13,7 +14,7 @@ def main(args):
     compress = not args["no_compress"]
     ignore_actions = args["ignore_actions"]
     ignore_images = args["ignore_images"]
-    robots_num =args["robots_num"]
+    robots_num = args["robots_num"]
     can_bias = args["can_bias"]
     urdf_path = args["urdf_path"]
     task_name = args["task_name"]
@@ -39,6 +40,7 @@ def main(args):
             actions = root["/action"][()]
         if not ignore_images:
             import cv2
+
             images = {}
             for cam_name in camera_names:
                 images[cam_name] = root[f"/observations/images/{cam_name}"][()]
@@ -57,15 +59,16 @@ def main(args):
         if robot_name == "airbot_play":
             # modify the path to the airbot_play urdf file
             import airbot
+
             # instance the airbot player
             urdf_path = airbot.AIRBOT_PLAY_URDF
             vel = 1.0
             for i in range(robots_num):
-                robots_list.append(airbot.create_agent(
-                    urdf_path, "down", f"{vcan}can{i+can_bias}", vel, "gripper"))
+                robots_list.append(airbot.create_agent(urdf_path, "down", f"{vcan}can{i + can_bias}", vel, "gripper"))
         elif "ros" in robot_name:
-            from ros_robot import RosRobot
             import rospy
+            from ros_robot import RosRobot
+
             rospy.init_node("replay_episodes")
             namespace = "/airbot_play"
             states_topic = f"{namespace}/joint_states"
@@ -73,7 +76,7 @@ def main(args):
             gripper_action_topic = f"{namespace}/gripper_group_position_controller/command"
             states_num = 7
             default_joints = [0.0] * 7
-            for i in range(robots_num):
+            for _ in range(robots_num):
                 robots_list.append(
                     RosRobot(
                         states_topic,
@@ -162,7 +165,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-cn",
         "--camera_names",
-        nargs="+", 
+        nargs="+",
         default=("0", "1"),
         help="Camera names.",
     )

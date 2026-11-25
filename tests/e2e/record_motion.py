@@ -50,6 +50,7 @@ def target(arm) -> dict:
 
 def logged(ev: str, describe):
     """Wrap a method: log `ev` with describe(self, result, *args, **kwargs) for outermost calls."""
+
     def deco(fn):
         @functools.wraps(fn)
         def wrapper(self, *args, **kwargs):
@@ -66,7 +67,9 @@ def logged(ev: str, describe):
             if outer:
                 emit(ev, **describe(self, result, *args, **kwargs))
             return result
+
         return wrapper
+
     return deco
 
 
@@ -110,8 +113,12 @@ if os.path.exists(os.path.join(os.path.dirname(program), "airbot_play_transfer.p
 
     T = tr.Transfer
     T.line = logged("line", lambda s, r, start, xyz, xyzw, what, *a, **k: {"what": what, "xyz": list(xyz)})(T.line)
-    T.plan_to_pose = logged("plan", lambda s, r, start, xyz, xyzw, what, *a, **k: {"what": what, "xyz": list(xyz)})(T.plan_to_pose)
-    T.plan_to_joints = logged("plan_joints", lambda s, r, start, joints, what, *a, **k: {"what": what, "joints": list(joints)})(T.plan_to_joints)
+    T.plan_to_pose = logged("plan", lambda s, r, start, xyz, xyzw, what, *a, **k: {"what": what, "xyz": list(xyz)})(
+        T.plan_to_pose
+    )
+    T.plan_to_joints = logged(
+        "plan_joints", lambda s, r, start, joints, what, *a, **k: {"what": what, "joints": list(joints)}
+    )(T.plan_to_joints)
     T.run = logged("run", lambda s, r, start, segments, *a, **k: {"segments": len(segments), **target(s.arm)})(T.run)
 
 os.chdir(os.path.dirname(program))

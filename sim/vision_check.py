@@ -41,8 +41,10 @@ class Checker:
         self.seg = mujoco.Renderer(self.m, int(c["HEIGHT"]), int(c["WIDTH"]))
         self.seg.enable_segmentation_rendering()
         self.names = list(cfg["CUBE_COLORS"])
-        self.hsv = {self.names[0]: (vision["HSV1_L"], vision["HSV1_H"]),
-                    self.names[1]: (vision["HSV2_L"], vision["HSV2_H"])}
+        self.hsv = {
+            self.names[0]: (vision["HSV1_L"], vision["HSV1_H"]),
+            self.names[1]: (vision["HSV2_L"], vision["HSV2_H"]),
+        }
         ph = place_hsv(vision)
         self.hsv_place = {self.names[0]: ph[1], self.names[1]: ph[2]}
         width = int(c["WIDTH"])
@@ -63,7 +65,7 @@ class Checker:
             b[PLACE_CROP_ROW:] = 0
             if self.crop_x is not None:
                 b[:, : max(0, int(self.crop_x[0]))] = 0
-                b[:, int(self.crop_x[1]):] = 0
+                b[:, int(self.crop_x[1]) :] = 0
         return b
 
     def locked(self, b, ids, place: bool):
@@ -133,8 +135,10 @@ class Checker:
         hold_q = scene.finger_q_for_gap(self.cfg["CUBE_SIZE"]) + 0.0005
         world = World(self.cfg)
         area = world.pick
-        corners = [tuple(area.center + np.array([sx, sy]) * (area.half - self.s))
-                   for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1), (0, 0))]
+        corners = [
+            tuple(area.center + np.array([sx, sy]) * (area.half - self.s))
+            for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1), (0, 0))
+        ]
         problems = checks = 0
         for k in range(1, levels + 1):  # placing block k+1 onto a tower of k
             top = self.names[(k - 1) % 2]
@@ -150,7 +154,10 @@ class Checker:
                     self.cam.put(i, (tx + off[0], ty + off[1], self.z_floor + self.s + j * h))
                     top_id = self.geom(i)
                 for x, y in corners:  # world x, y
-                    self.cam.put(self.cam.cube(top, used[top]), (x - self.cam.base[0], y - self.cam.base[1], self.z_floor + self.s))
+                    self.cam.put(
+                        self.cam.cube(top, used[top]),
+                        (x - self.cam.base[0], y - self.cam.base[1], self.z_floor + self.s),
+                    )
                     used[top] += 1
                 held = self.names[k % 2]
                 z_grasp = self.control["PICK_GRASP_Z"] + k * h + gap
@@ -165,8 +172,10 @@ class Checker:
                 checks += 1
                 if got is None or top_id not in got:
                     problems += 1
-                    log(f"place on {k} blocks, top shifted ({dx:+.2f}, {dy:+.2f}): the detection locks onto "
-                        f"{self.describe(got)}, not the tower's top block")
+                    log(
+                        f"place on {k} blocks, top shifted ({dx:+.2f}, {dy:+.2f}): the detection locks onto "
+                        f"{self.describe(got)}, not the tower's top block"
+                    )
         log(f"place: {checks} images checked (towers of 1 .. {levels}, 5 offsets each)")
         return problems
 

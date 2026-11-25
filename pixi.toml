@@ -48,8 +48,9 @@ pyserial = "*"
 py-opencv = "*"
 # --- simulation ---
 mujoco = ">=3.16.0,<4"
-# --- tests (pixi run test) ---
+# --- tests (pixi run test) and code style (pixi run lint / fmt) ---
 pytest = ">=9.2.0,<10"
+ruff = ">=0.17.6,<0.18"
 
 [pypi-dependencies]
 robotics-tools = "==1.0.2"
@@ -83,6 +84,10 @@ record = { cmd = "python data_driven/record_data.py", description = "Record a de
 # `test-e2e SCENARIO`: the whole stack in the simulation on a private ROS master (floor, open-place, held-cube, limit, baseline, kill-sim, golden; floor and held-cube take --place-stop PX, most take --no-scene).
 test = { cmd = "python -m pytest -q tests", description = "Unit tests and arm-driver contract tests (no ROS master needed)" }
 test-e2e = { cmd = "python tests/e2e/sim_e2e.py", description = "End-to-end run in the simulation: floor | open-place | held-cube | limit | baseline | kill-sim | golden" }
+
+# Code style (ruff.toml): `lint` checks only (also on GitHub Actions), `fmt` rewrites the files.
+lint = { cmd = "ruff format --check . && ruff check .", description = "Check the Python code style (ruff format + ruff check)" }
+fmt = { cmd = "ruff format . && ruff check --fix . && ruff format .", description = "Format the Python code and apply the safe lint fixes" }
 
 # MuJoCo simulation. Terminal 0 in the simulation: `pixi run sim` instead of airbot_server.
 sim = { cmd = "python -m sim.world", description = "Run the simulated arm, gripper and cubes (MuJoCo window; --headless, --no-camera, --seed N)" }

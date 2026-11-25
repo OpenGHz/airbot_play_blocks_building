@@ -8,10 +8,9 @@ gripper snapped shut before opening (seen at the start of pick-place), and every
 
 from __future__ import annotations
 
+import airbot_play_ros_interface as bridge
 import pytest
 import rospy
-
-import airbot_play_ros_interface as bridge
 
 
 class FakeDriver:

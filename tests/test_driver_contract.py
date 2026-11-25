@@ -16,7 +16,6 @@ import sys
 import time
 
 import pytest
-
 from conftest import REPO
 
 JOINT_TARGET = [0.2, -0.4, 0.4, 0.1, -0.1, 0.3]
@@ -46,8 +45,13 @@ class SimBackend:
 
     def start(self):
         env = dict(os.environ, AIRBOT_SIM_SOCKET=str(self.sock))
-        self.proc = subprocess.Popen([sys.executable, "-m", "sim.world", "--headless", "--no-camera", "--seed", "0"],
-                                     cwd=REPO, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.proc = subprocess.Popen(
+            [sys.executable, "-m", "sim.world", "--headless", "--no-camera", "--seed", "0"],
+            cwd=REPO,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         assert wait_until(self.sock.exists, 30), "the simulation did not open its socket"
 
     def stop(self):
@@ -149,7 +153,9 @@ def test_gripper_servo_reaches_the_width(backend, driver):
         return abs(driver.get_eef_state()[0][0] - width) < 0.004
 
     for width in (0.06, 0.02):
-        assert wait_until(lambda: reached(width), backend.settle, period=0.005), f"gripper at {driver.get_eef_state()[0]}"
+        assert wait_until(lambda width=width: reached(width), backend.settle, period=0.005), (
+            f"gripper at {driver.get_eef_state()[0]}"
+        )
 
 
 def test_connect_fails_fast_with_a_hint_when_nothing_is_running(backend, tmp_path):

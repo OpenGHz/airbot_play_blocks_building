@@ -49,7 +49,7 @@ def _yaw_quat(yaw: float) -> np.ndarray:
 class PickArea:
     """Keeps a batch of cubes in the pick area and refills it once it is empty."""
 
-    def __init__(self, world: "World"):
+    def __init__(self, world: World):
         self.w = world
         cfg = world.cfg
         area = cfg.get("PICK_AREA", {})
@@ -87,7 +87,9 @@ class PickArea:
             if q is not None:
                 break
         else:
-            raise RuntimeError(f"cannot reach the pick area centre {list(self.center)} even from the scene file's mount")
+            raise RuntimeError(
+                f"cannot reach the pick area centre {list(self.center)} even from the scene file's mount"
+            )
         cx, cy = gx + base[0], gy + base[1]  # world x, y of the grasped cube
         d.qpos[arm.qadr] = q
         mujoco.mj_kinematics(m, d)
@@ -318,8 +320,10 @@ class World:
     def mount_text(self) -> str:
         dx, dy = self.mount
         x0, x1, y0, y1 = scene.table_rect(self.cfg)[0]
-        return (f"机械臂底座相对场景文件里的安装位置 ({dx:+.3f}, {dy:+.3f}) m；"
-                f"底座中心离桌子四边：前 {x1 - dx:.3f}，后 {dx - x0:.3f}，左 {y1 - dy:.3f}，右 {dy - y0:.3f} m")
+        return (
+            f"机械臂底座相对场景文件里的安装位置 ({dx:+.3f}, {dy:+.3f}) m；"
+            f"底座中心离桌子四边：前 {x1 - dx:.3f}，后 {dx - x0:.3f}，左 {y1 - dy:.3f}，右 {dy - y0:.3f} m"
+        )
 
     def _arm_in_table(self, depth: float) -> str:
         m, d = self.model, self.data
@@ -500,8 +504,14 @@ class World:
             out = []
             for i in self.active():
                 where = "抓取区" if i in self.pick.batch else ""
-                out.append({"cube": i, "color": self.cubes[i]["color"], "base_xyz": (self.cube_pos(i) - self.base).tolist(),
-                            "where": where})
+                out.append(
+                    {
+                        "cube": i,
+                        "color": self.cubes[i]["color"],
+                        "base_xyz": (self.cube_pos(i) - self.base).tolist(),
+                        "where": where,
+                    }
+                )
             return {"cubes": out}
         if cmd in ("arm_mount", "arm_where"):
             if cmd == "arm_mount":
@@ -521,7 +531,9 @@ class World:
 
             path = self.cfg["_path"]
             config_file.set_keys(path, {"MOUNT_OFFSET": [round(float(v), 4) for v in self.mount]}, after="NAME")
-            return {"message": f"安装位置 {self.mount_text()} 已写入 {path.name}（MOUNT_OFFSET），下次 pixi run sim 沿用"}
+            return {
+                "message": f"安装位置 {self.mount_text()} 已写入 {path.name}（MOUNT_OFFSET），下次 pixi run sim 沿用"
+            }
         raise ValueError(f"unknown sim-ctl command {cmd!r}")
 
 

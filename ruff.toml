@@ -1,0 +1,26 @@
+# Code style of the project's Python code (ruff, installed by pixi).
+#   pixi run fmt    format the code and apply the safe lint fixes
+#   pixi run lint   check only (formatting and lint); also run on GitHub Actions
+# The submodules under ros_ws/src are upstream code with their own style and are left out.
+line-length = 120
+target-version = "py312"
+extend-exclude = [
+    "ros_ws/src/easy_arm_control",
+    "ros_ws/src/airbot_play_moveit1_base",
+    "ros_ws/src/trac_ik",
+]
+
+[lint]
+# Listed explicitly, so a newer ruff does not change what is checked.
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # import order
+    "UP", # newer Python syntax
+    "B",  # likely bugs (flake8-bugbear)
+]
+ignore = [
+    "E501", # line length: the formatter wraps the code; long comments (many in Chinese) are left as they are
+    "B905", # zip() without strict=: adding it everywhere would only be noise
+]

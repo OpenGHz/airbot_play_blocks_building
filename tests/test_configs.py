@@ -3,15 +3,39 @@
 import pathlib
 
 import pytest
-
 from conftest import REPO
+
 from sim import config_file
 
-CONTROL_KEYS = ["PICK_JOINT", "PICK_POSITION_X", "PICK_POSITION_Y", "PICK_POSITION_Z", "PICK_ROLL", "PICK_PITCH",
-                "PICK_YAW", "PICK_GRASP_Z", "PLACE_POSITION_X", "PLACE_POSITION_Y", "PLACE_POSITION_Z", "PLACE_ROLL",
-                "PLACE_PITCH", "PLACE_YAW", "CUBE_HEIGHT"]
-VISION_KEYS = ["HSV1_L", "HSV1_H", "HSV2_L", "HSV2_H", "EXPECT_PICK_REF", "EXPECT_PLACE_REF", "EXPECT_X",
-               "USE_PLACE_HSV", "AREA_LIMIT_PICK", "AREA_LIMIT_PLACE"]
+CONTROL_KEYS = [
+    "PICK_JOINT",
+    "PICK_POSITION_X",
+    "PICK_POSITION_Y",
+    "PICK_POSITION_Z",
+    "PICK_ROLL",
+    "PICK_PITCH",
+    "PICK_YAW",
+    "PICK_GRASP_Z",
+    "PLACE_POSITION_X",
+    "PLACE_POSITION_Y",
+    "PLACE_POSITION_Z",
+    "PLACE_ROLL",
+    "PLACE_PITCH",
+    "PLACE_YAW",
+    "CUBE_HEIGHT",
+]
+VISION_KEYS = [
+    "HSV1_L",
+    "HSV1_H",
+    "HSV2_L",
+    "HSV2_H",
+    "EXPECT_PICK_REF",
+    "EXPECT_PLACE_REF",
+    "EXPECT_X",
+    "USE_PLACE_HSV",
+    "AREA_LIMIT_PICK",
+    "AREA_LIMIT_PLACE",
+]
 
 
 @pytest.mark.parametrize("name", ["real", "sim"])

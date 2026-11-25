@@ -60,7 +60,9 @@ class MujocoDriver:
         hello = self._request("hello", timeout=max(0.5, deadline - time.monotonic()))
         if hello.get("version") != protocol.VERSION:
             self.disconnect()
-            raise DriverError(f"仿真进程的协议版本是 {hello.get('version')}，驱动是 {protocol.VERSION}：请重启 pixi run sim")
+            raise DriverError(
+                f"仿真进程的协议版本是 {hello.get('version')}，驱动是 {protocol.VERSION}：请重启 pixi run sim"
+            )
         self._info = {"name": hello.get("name", "mujoco"), "is_sim": bool(hello.get("is_sim", True))}
         self._request("subscribe", rate=self.rate)
         if not self._state_event.wait(max(0.5, deadline - time.monotonic())):

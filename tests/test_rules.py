@@ -4,8 +4,18 @@ import math
 
 import pytest
 
-from airbot_play_rules import (TrackLimit, fingers_beside_top_block, first_place_xy, floor_and_tower_z, place_aligned,
-                               release_z, retreat_sign, slot_axis, slot_exit_targets, tower_footprint)
+from airbot_play_rules import (
+    TrackLimit,
+    fingers_beside_top_block,
+    first_place_xy,
+    floor_and_tower_z,
+    place_aligned,
+    release_z,
+    retreat_sign,
+    slot_axis,
+    slot_exit_targets,
+    tower_footprint,
+)
 
 H = 0.025  # CUBE_HEIGHT
 
@@ -25,11 +35,14 @@ def test_release_height_follows_place_height_on_every_layer():
     assert release_z(place, 4, H) != pytest.approx(grasp + 4 * H)
 
 
-@pytest.mark.parametrize("pick_y, place_y, sign", [
-    (0.0, 0.2145, -1.0),   # configs/control/real.yaml: tower to the left, back off to -y like the old fixed shift
-    (0.0, -0.2121, 1.0),   # configs/control/sim.yaml: tower to the right
-    (0.1, 0.1, 1.0),
-])
+@pytest.mark.parametrize(
+    "pick_y, place_y, sign",
+    [
+        (0.0, 0.2145, -1.0),  # configs/control/real.yaml: tower to the left, back off to -y like the old fixed shift
+        (0.0, -0.2121, 1.0),  # configs/control/sim.yaml: tower to the right
+        (0.1, 0.1, 1.0),
+    ],
+)
 def test_retreat_goes_towards_the_pick_area(pick_y, place_y, sign):
     assert retreat_sign(pick_y, place_y) == sign
 
@@ -128,15 +141,18 @@ def test_fingers_beside_top_block():
     assert not fingers_beside_top_block((0.35, 0.10), tower, 0.10, top)  # low, but away from the tower
 
 
-@pytest.mark.parametrize("d, aligned", [
-    ((1.5, 0.0), False),   # still short along the approach: the old |dx| < 2 px would stop here
-    ((0.4, 0.0), True),
-    ((0.0, 0.0), True),
-    ((-1.5, 0.0), True),   # overshot a little: stop rather than step back and forth
-    ((-2.5, 0.0), False),
-    ((0.0, 1.5), True),    # across the approach the old 2 px window is kept
-    ((0.0, -2.5), False),
-])
+@pytest.mark.parametrize(
+    "d, aligned",
+    [
+        ((1.5, 0.0), False),  # still short along the approach: the old |dx| < 2 px would stop here
+        ((0.4, 0.0), True),
+        ((0.0, 0.0), True),
+        ((-1.5, 0.0), True),  # overshot a little: stop rather than step back and forth
+        ((-2.5, 0.0), False),
+        ((0.0, 1.5), True),  # across the approach the old 2 px window is kept
+        ((0.0, -2.5), False),
+    ],
+)
 def test_place_stop_window_is_asymmetric_along_the_approach(d, aligned):
     assert place_aligned(d, (1.0, 0.0), near=0.5) is aligned
 

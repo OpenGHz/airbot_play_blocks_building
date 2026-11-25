@@ -72,7 +72,9 @@ class Hand:
         elif active & TRANSLATE:  # the arm base: slide on the table top
             target = d["mount0"] + delta[:2]
             _, why = self.w.set_mount(target)
-            self.note = {"": "", "edge": "at the table edge"}.get(why, f"blocked: the {why.split(':', 1)[-1]} would hit the table")
+            self.note = {"": "", "edge": "at the table edge"}.get(
+                why, f"blocked: the {why.split(':', 1)[-1]} would hit the table"
+            )
         else:
             self.note = "the arm base only slides, it does not turn"
 
@@ -89,14 +91,18 @@ class Hand:
         font = mujoco.mjtFontScale.mjFONTSCALE_100
         dx, dy = self.w.mount
         help_left = "Select\nMove\nTurn\nLet go\nArm base"
-        help_right = ("double-click a cube, or the arm base\n"
-                      "Ctrl + right drag   (with Shift: along the floor / table top)\n"
-                      "Ctrl + left drag   (cubes)\n"
-                      "the cube is set down on what is under it\n"
-                      f"{dx:+.3f}, {dy:+.3f} m from the scene file's mount   (sim-ctl arm save keeps it)")
+        help_right = (
+            "double-click a cube, or the arm base\n"
+            "Ctrl + right drag   (with Shift: along the floor / table top)\n"
+            "Ctrl + left drag   (cubes)\n"
+            "the cube is set down on what is under it\n"
+            f"{dx:+.3f}, {dy:+.3f} m from the scene file's mount   (sim-ctl arm save keeps it)"
+        )
         if not np.allclose(self.w.mount, 0.0):  # as on the real robot: the recorded positions no longer match
             help_left += "\n"
-            help_right += "\nmoved: re-record the positions in configs/control/sim.yaml (manual section 7), or move it back"
+            help_right += (
+                "\nmoved: re-record the positions in configs/control/sim.yaml (manual section 7), or move it back"
+            )
         out = [(font, grid.mjGRID_BOTTOMLEFT, help_left, help_right)]
         sel = self._selected_text()
         if sel:
@@ -134,5 +140,7 @@ class Hand:
             return f"cube_{i} ({self.w.cubes[i]['color']})   arm base frame  x {x:+.3f}  y {y:+.3f}  z {z:+.3f} m"
         if sel in self.base_bodies:
             dx, dy = self.w.mount
-            return f"arm base   {dx:+.3f}, {dy:+.3f} m from the scene file's mount" + (f"   ({self.note})" if self.note else "")
+            return f"arm base   {dx:+.3f}, {dy:+.3f} m from the scene file's mount" + (
+                f"   ({self.note})" if self.note else ""
+            )
         return ""

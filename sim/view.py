@@ -15,9 +15,9 @@ import time
 
 import mujoco
 import mujoco.viewer
-import numpy as np
 
-from sim import poses as named, scene, snapshot
+from sim import poses as named
+from sim import scene, snapshot
 
 
 def main():
@@ -31,8 +31,10 @@ def main():
     res = named.compute(cfg, named.load_control(args.control))
     tower = res["layers"] - 1 if args.pose == "top" else 0
     model, data = snapshot.pose_scene(cfg, res, args.pose, tower)
-    print(f"table {res['table_height']:.3f} m, tower spot {cfg['TOWER_XY']}, "
-          f"{res['layers']} blocks reachable without lifting; pose: {args.pose}")
+    print(
+        f"table {res['table_height']:.3f} m, tower spot {cfg['TOWER_XY']}, "
+        f"{res['layers']} blocks reachable without lifting; pose: {args.pose}"
+    )
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         cam = snapshot.views(cfg, res["table_height"])["overview"]

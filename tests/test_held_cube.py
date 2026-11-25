@@ -2,9 +2,9 @@
 
 import numpy as np
 import pytest
+from conftest import REPO
 
 from Best_Contour import find_held_cube, held_shift
-from conftest import REPO
 from sim import config_file
 
 

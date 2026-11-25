@@ -36,8 +36,9 @@ class _Feedback(arm_pb2_grpc.FeedbackServiceServicer):
     def GetState(self, request, context):
         while context.is_active() and not self.s.stopped.is_set():
             with self.s.lock:
-                js = types_pb2.JointStates(name=NAMES, position=self.s.q + [self.s.eef],
-                                           velocity=[0.0] * 7, effort=[0.0] * 7)
+                js = types_pb2.JointStates(
+                    name=NAMES, position=self.s.q + [self.s.eef], velocity=[0.0] * 7, effort=[0.0] * 7
+                )
             yield arm_pb2.GetStateResponse(request_id=request.request_id, component_names=["arm"], state=js)
             time.sleep(0.005)
 
@@ -51,8 +52,9 @@ class _Control(arm_pb2_grpc.ControlServiceServicer):
 
     def SetMode(self, request, context):
         self.s.mode = request.modes[0]
-        return arm_pb2.SetModeResponse(request_id=request.request_id, component_names=request.component_names,
-                                       modes=request.modes)
+        return arm_pb2.SetModeResponse(
+            request_id=request.request_id, component_names=request.component_names, modes=request.modes
+        )
 
     def SetState(self, request_iterator, context):
         for req in request_iterator:

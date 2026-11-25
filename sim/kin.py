@@ -33,9 +33,7 @@ class Arm:
         self.rng = np.random.default_rng(0)
         # base_link sits on the table, so it is left out of the clearance check.
         robot = {model.body(b).id for b in _robot_bodies(model) if b != "base_link"}
-        self.robot_geoms = [
-            g for g in range(model.ngeom) if model.geom_bodyid[g] in robot and model.geom_contype[g]
-        ]
+        self.robot_geoms = [g for g in range(model.ngeom) if model.geom_bodyid[g] in robot and model.geom_contype[g]]
         env = ["table_top", "column_0", "column_1", "foot_0", "foot_1"]
         self.env_geoms = {n: model.geom(n).id for n in env}
         self.floor = model.geom("floor").id
@@ -94,7 +92,6 @@ class Arm:
                 if dist < best:
                     best, where = dist, f"{self.m.body(self.m.geom_bodyid[g]).name}~{name}"
         return best, where
-
 
     def gap(self, q, geoms, finger_q=0.0, distmax=0.2):
         """Smallest distance (m) from the arm to the given geoms, and the closest arm body."""

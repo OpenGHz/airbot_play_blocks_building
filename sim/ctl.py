@@ -27,8 +27,12 @@ from sim.driver import DriverError, MujocoDriver
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(prog="sim-ctl", description=__doc__.splitlines()[0],
-                                 formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__.split("\n", 2)[2])
+    ap = argparse.ArgumentParser(
+        prog="sim-ctl",
+        description=__doc__.splitlines()[0],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__.split("\n", 2)[2],
+    )
     sub = ap.add_subparsers(dest="group", required=True)
     cube = sub.add_parser("cube").add_subparsers(dest="cmd", required=True)
     for name in ("to-gripper", "put-under", "take"):

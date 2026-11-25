@@ -124,13 +124,17 @@ def main():
     for k in range(args.trials):
         cfg.setdefault("PICK_AREA", {})["SEED"] = k
         res = run(cfg, control, args.fast)
-        print(f"trial {k}: slip {res['max_slip_mm']:.2f} mm, rotation {res['max_rot_deg']:.2f} deg, held: {res['held']}")
+        print(
+            f"trial {k}: slip {res['max_slip_mm']:.2f} mm, rotation {res['max_rot_deg']:.2f} deg, held: {res['held']}"
+        )
         worst = {
             "max_slip_mm": max(worst["max_slip_mm"], res["max_slip_mm"]),
             "max_rot_deg": max(worst["max_rot_deg"], res["max_rot_deg"]),
             "held": worst["held"] and res["held"],
         }
-    print(f"worst: slip {worst['max_slip_mm']:.2f} mm, rotation {worst['max_rot_deg']:.2f} deg, all held: {worst['held']}")
+    print(
+        f"worst: slip {worst['max_slip_mm']:.2f} mm, rotation {worst['max_rot_deg']:.2f} deg, all held: {worst['held']}"
+    )
 
 
 if __name__ == "__main__":

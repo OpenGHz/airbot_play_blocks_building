@@ -95,7 +95,14 @@ def test_drag_the_arm_base_slides_only_the_arm(world):
     i = w.pick.batch[0]
     cube = w.cube_pos(i).copy()
     base0 = w.data.xpos[w.root].copy()
-    drag(hand, w, "base_link", TRANSLATE, (base0, np.array([1.0, 0, 0, 0])), [(base0 + [-0.10, 0.05, 0.02], [1.0, 0, 0, 0])])
+    drag(
+        hand,
+        w,
+        "base_link",
+        TRANSLATE,
+        (base0, np.array([1.0, 0, 0, 0])),
+        [(base0 + [-0.10, 0.05, 0.02], [1.0, 0, 0, 0])],
+    )
     assert np.allclose(w.mount, [-0.10, 0.05], atol=1e-9)
     assert np.allclose(w.data.xpos[w.root][:2], base0[:2] + [-0.10, 0.05], atol=1e-6)
     assert w.data.xpos[w.root][2] == pytest.approx(base0[2]), "the base stays on the table top"

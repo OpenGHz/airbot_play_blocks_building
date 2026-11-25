@@ -40,7 +40,9 @@ class Cam:
         self.arm = kin.Arm(self.m, mujoco.MjData(self.m), scene.base_offset(cfg))
         c = cfg["CAMERA"]
         self.r = mujoco.Renderer(self.m, int(c["HEIGHT"]), int(c["WIDTH"]))
-        self.cubes = [self.m.joint(self.m.body(f"cube_{i}").jntadr[0]).qposadr[0] for i in range(int(cfg.get("CUBE_POOL", 40)))]
+        self.cubes = [
+            self.m.joint(self.m.body(f"cube_{i}").jntadr[0]).qposadr[0] for i in range(int(cfg.get("CUBE_POOL", 40)))
+        ]
         self.colors = scene.pool_colors(cfg)
         self.base = scene.base_offset(cfg)
         self.s = cfg["CUBE_SIZE"] / 2
@@ -126,7 +128,9 @@ def main():
         if res is None:
             raise SystemExit(f"pick: the {color} cube under the gripper was not detected")
         picks.append(res["center"])
-        print(f"pick {color:6s}: centre ({res['center'][0]:.1f}, {res['center'][1]:.1f}), w_h ({res['wh'][0]:.1f}, {res['wh'][1]:.1f})")
+        print(
+            f"pick {color:6s}: centre ({res['center'][0]:.1f}, {res['center'][1]:.1f}), w_h ({res['wh'][0]:.1f}, {res['wh'][1]:.1f})"
+        )
     expect_x = float(np.mean([c[0] for c in picks]))
     pick_ref = float(np.mean([c[1] for c in picks]))
 
@@ -150,15 +154,21 @@ def main():
         if args.save:
             cv2.imwrite(f"{args.save}_place_{k}.png", img)
         top_color = names[(k - 1) % 2]
-        res = detect(img, *hsv_place[top_color], vision["AREA_LIMIT_PLACE"], 5.5, (expect_x, pick_ref), crop=True, crop_x=crop_x)
+        res = detect(
+            img, *hsv_place[top_color], vision["AREA_LIMIT_PLACE"], 5.5, (expect_x, pick_ref), crop=True, crop_x=crop_x
+        )
         if res is None:
             print(f"place on {k:2d} blocks: top cube not detected")
             continue
         edges.append(res["upper_edge"])
         areas.append(res["wh"][0] * res["wh"][1])
-        print(f"place on {k:2d} blocks: top cube centre ({res['center'][0]:.1f}, {res['center'][1]:.1f}), upper edge {res['upper_edge']:.1f}")
+        print(
+            f"place on {k:2d} blocks: top cube centre ({res['center'][0]:.1f}, {res['center'][1]:.1f}), upper edge {res['upper_edge']:.1f}"
+        )
     place_ref = float(np.median(edges))
-    print(f"place-stage tower-top box area {min(areas):.0f} ~ {max(areas):.0f} (AREA_LIMIT_PLACE {vision['AREA_LIMIT_PLACE']})")
+    print(
+        f"place-stage tower-top box area {min(areas):.0f} ~ {max(areas):.0f} (AREA_LIMIT_PLACE {vision['AREA_LIMIT_PLACE']})"
+    )
 
     # Held cube (--held-cube): where it is with no grasp offset, and how far the top cube has to move
     # in the image per pixel the held cube moves. Image x follows base y (finger opening), image y
@@ -172,8 +182,15 @@ def main():
         cam.put(cam.cube(names[k % 2], k // 2), (tx + held_d[0], ty + held_d[1], z_grasp - 0.0025))
         cam.pose([tx, ty, z_grasp], hold_q)
         img = cam.render()
-        top = detect(img, *hsv_place[names[(k - 1) % 2]], vision["AREA_LIMIT_PLACE"], 5.5, (expect_x, pick_ref),
-                     crop=True, crop_x=crop_x)
+        top = detect(
+            img,
+            *hsv_place[names[(k - 1) % 2]],
+            vision["AREA_LIMIT_PLACE"],
+            5.5,
+            (expect_x, pick_ref),
+            crop=True,
+            crop_x=crop_x,
+        )
         _, held_bin = StdVideo.color_filter(img, *hsv_place[names[k % 2]])
         if crop_x is not None:
             held_bin[:, : max(0, int(crop_x[0]))] = 0
@@ -199,9 +216,17 @@ def main():
     print(f"\nEXPECT_X {expect_x:.1f}  EXPECT_PICK_REF {pick_ref:.1f}  EXPECT_PLACE_REF {place_ref:.1f}")
     print(f"EXPECT_HELD_REF {held0[1]:.1f}  HELD_SCALE {scale}")
     if args.apply:
-        config_file.set_keys(args.vision, {"EXPECT_X": round(expect_x, 1), "EXPECT_PICK_REF": round(pick_ref, 1),
-                                           "EXPECT_PLACE_REF": round(place_ref, 1),
-                                           "EXPECT_HELD_REF": round(held0[1], 1), "HELD_SCALE": scale}, after="EXPECT_X")
+        config_file.set_keys(
+            args.vision,
+            {
+                "EXPECT_X": round(expect_x, 1),
+                "EXPECT_PICK_REF": round(pick_ref, 1),
+                "EXPECT_PLACE_REF": round(place_ref, 1),
+                "EXPECT_HELD_REF": round(held0[1], 1),
+                "HELD_SCALE": scale,
+            },
+            after="EXPECT_X",
+        )
         print(f"written to {args.vision}")
 
 

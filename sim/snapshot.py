@@ -1,19 +1,19 @@
 """Render the scene to PNG files (overview, side views, wrist camera).
 
-    pixi run sim-snapshot                  # pick area on the floor: runs/sim/scene_floor.png
-    pixi run sim-snapshot --scene table    # pick area on the table: runs/sim/scene_table.png
+pixi run sim-snapshot                  # pick area on the floor: runs/sim/scene_floor.png
+pixi run sim-snapshot --scene table    # pick area on the table: runs/sim/scene_table.png
 """
 
 from __future__ import annotations
 
 import argparse
-import pathlib
 
 import cv2
 import mujoco
 import numpy as np
 
-from sim import poses as named, scene
+from sim import poses as named
+from sim import scene
 
 OUT = scene.REPO / "runs/sim"
 
@@ -26,13 +26,19 @@ def build_with_props(cfg, h_table, tower_blocks: int, held: bool):
     tx, ty = cfg["TOWER_XY"]
     for i in range(tower_blocks):
         spec.worldbody.add_geom(
-            name=f"tower_{i}", type=mujoco.mjtGeom.mjGEOM_BOX, size=[s, s, s],
-            pos=[tx, ty, s + 2 * s * i], rgba=colors[i % 2], contype=0, conaffinity=0,
+            name=f"tower_{i}",
+            type=mujoco.mjtGeom.mjGEOM_BOX,
+            size=[s, s, s],
+            pos=[tx, ty, s + 2 * s * i],
+            rgba=colors[i % 2],
+            contype=0,
+            conaffinity=0,
         )
     if held:
         b = spec.worldbody.add_body(name="held_cube", mocap=True)
-        b.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX, size=[s, s, s], rgba=colors[tower_blocks % 2],
-                   contype=0, conaffinity=0)
+        b.add_geom(
+            type=mujoco.mjtGeom.mjGEOM_BOX, size=[s, s, s], rgba=colors[tower_blocks % 2], contype=0, conaffinity=0
+        )
     model = spec.compile()
     return model, mujoco.MjData(model)
 
@@ -105,9 +111,11 @@ def main():
 
     # 1. Overview: arm at the pick scan pose above the cubes.
     m, d = pose_scene(cfg, res, "pick", 0)
-    a = label(render(m, d, v["overview"], W, Hh),
-              f"{cfg['NAME']} scene, {cfg.get('MOUNT', 'side')} mount: table {H:.3f} m, "
-              f"pick area on the {'floor' if floor else 'table'}")
+    a = label(
+        render(m, d, v["overview"], W, Hh),
+        f"{cfg['NAME']} scene, {cfg.get('MOUNT', 'side')} mount: table {H:.3f} m, "
+        f"pick area on the {'floor' if floor else 'table'}",
+    )
     b = label(render(m, d, "eye", cam["WIDTH"], cam["HEIGHT"]), "wrist camera at pick scan pose (640x480)")
     b = cv2.resize(b, (W, Hh))
 
@@ -118,16 +126,17 @@ def main():
 
     # 3. Highest block at this table height.
     m, d = pose_scene(cfg, res, "top", n - 1)
-    f = label(render(m, d, v["top"], W, Hh),
-              f"block {n} on top: {n} blocks without lifting the table")
+    f = label(render(m, d, v["top"], W, Hh), f"block {n} on top: {n} blocks without lifting the table")
     g = label(render(m, d, "eye", cam["WIDTH"], cam["HEIGHT"]), f"wrist camera placing block {n}")
     g = cv2.resize(g, (W, Hh))
 
     grid = np.vstack([np.hstack([a, b]), np.hstack([c, e]), np.hstack([f, g])])
     path = OUT / f"scene_{cfg['NAME']}.png"
     cv2.imwrite(str(path), grid)
-    print(f"table height {H:.3f} m, tower at ({tx}, {ty}), first block released at z = {res['z_first']:+.3f}, "
-          f"{n} blocks without lifting")
+    print(
+        f"table height {H:.3f} m, tower at ({tx}, {ty}), first block released at z = {res['z_first']:+.3f}, "
+        f"{n} blocks without lifting"
+    )
     print(f"written {path.relative_to(scene.REPO)}")
 
 

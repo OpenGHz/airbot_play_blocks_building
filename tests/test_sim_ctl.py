@@ -8,8 +8,8 @@ import sys
 import time
 
 import pytest
-
 from conftest import REPO
+
 from sim import config_file
 
 
@@ -18,17 +18,32 @@ def sim(tmp_path):
     for name in ("sim.yaml", "sim_floor.yaml"):
         shutil.copy(REPO / "configs/scene" / name, tmp_path / name)
     env = dict(os.environ, AIRBOT_SIM_SOCKET=str(tmp_path / "s.sock"))
-    proc = subprocess.Popen([sys.executable, "-m", "sim.world", "--scene", str(tmp_path / "sim_floor.yaml"),
-                             "--headless", "--no-camera", "--seed", "0"], cwd=REPO, env=env,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "sim.world",
+            "--scene",
+            str(tmp_path / "sim_floor.yaml"),
+            "--headless",
+            "--no-camera",
+            "--seed",
+            "0",
+        ],
+        cwd=REPO,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     deadline = time.monotonic() + 30
     while not (tmp_path / "s.sock").exists():
         assert time.monotonic() < deadline and proc.poll() is None, "the simulation did not start"
         time.sleep(0.1)
 
     def ctl(*args):
-        out = subprocess.run([sys.executable, "-m", "sim.ctl", *args], cwd=REPO, env=env, capture_output=True,
-                             text=True, timeout=20)
+        out = subprocess.run(
+            [sys.executable, "-m", "sim.ctl", *args], cwd=REPO, env=env, capture_output=True, text=True, timeout=20
+        )
         assert out.returncode == 0, out.stderr
         return out.stdout
 
@@ -51,8 +66,9 @@ def test_arm_mount_where_and_save(sim):
     ctl("arm", "save")
     after = (tmp / "sim_floor.yaml").read_text()
     assert config_file.load(tmp / "sim_floor.yaml")["MOUNT_OFFSET"] == [0.0, -0.02]
-    assert [ln for ln in after.splitlines() if not ln.startswith("MOUNT_OFFSET")] == before.splitlines(), \
+    assert [ln for ln in after.splitlines() if not ln.startswith("MOUNT_OFFSET")] == before.splitlines(), (
         "only the MOUNT_OFFSET line is added; comments and the rest stay"
+    )
 
 
 def test_cube_list_uses_the_moved_base_frame(sim):
