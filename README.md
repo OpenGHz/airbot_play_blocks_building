@@ -88,6 +88,12 @@ pixi run vision -vd 2                 # 终端 3
 
 **开环放置**（`pixi run pick-place go P1 P2 open-place`）：抓取仍然靠视觉跟踪；放置不用视觉，每一块都直接到第一块的正上方，下降 `GAP_PLACE` 后松开。物块在夹爪里的偏差不会被纠正，会带到塔上。
 
+**不对称的放置停下条件**（`pixi run pick-place go P1 P2 place-stop 0.5`，可选）：默认的闭环放置在 |dx|、|dy| < 2 px 时就停，从第 2 块起夹爪总从塔的同一侧逼近，停在 2 px 死区的这一侧边缘，每层偏约 1 mm 并逐层累加。加 `place-stop ε` 后，沿逼近方向（两指之间的空隙方向）剩余偏差小于 ε 像素才停，越过 2 px 以内或横向 2 px 以内照旧停。ε 越小每层偏得越少，调节的步数越多；ε 不能为 0（识别以 0.5 px 为单位）。
+
+**不用规划场景**（`pixi run pick-place go P1 P2 no-scene`，可选）：默认在 MoveIt 规划场景里放入地面和塔，抓取区和塔之间的移动绕开它们规划，安全依赖模型（手指、塔的碰撞体）和实际的接近程度。加 `no-scene` 后按原来的固定路点移动（先升高、再水平移、松开后上升并朝抓取区一侧侧移 7.5 cm），不做碰撞检查，安全靠这些按真机布局定的余量，段之间会停一下。详见 [docs/pick_place_flow.md](docs/pick_place_flow.md) §4。
+
+**看手里的物块**（`pixi run vision -vd 2 --held-cube`，可选）：默认的闭环放置让夹爪对准塔顶物块，物块在夹爪里的偏差原样带到塔上（[分析](docs/place_closed_loop_analysis.md)）。加 `--held-cube` 后，Place 阶段同时识别手里的物块（另一种颜色，图像最下面），按它沿两指空隙方向偏离夹爪中心多少移动对准目标，让手里的物块对准塔顶物块；手指开合方向不修正。需要视觉配置里的 `EXPECT_HELD_REF`、`HELD_SCALE`：仿真里由 `pixi run sim-calib-vision --apply` 算出，真机上还没有标定（方法见 `configs/vision/real.yaml` 里的注释）。看不到手里的物块时不发偏差，机械臂停在原地。
+
 `pixi run <任务>` 后面的参数会原样传给对应的命令。《实验手册》原命令与新命令的逐条对照见 [docs/commands.md](docs/commands.md)。
 
 ### 动作失败或抓取区空了
@@ -107,7 +113,7 @@ pixi run vision -vd 2                 # 终端 3
 | `keyboard` | `scripts/keyboard.sh` → `rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/<env_type>.yaml` | 键盘遥控 |
 | `hsv-finder` | `scripts/hsv_finder.sh` → `python demo/hsv_finder.py` | 滑动条确定 HSV 阈值 |
 | `vision` | `scripts/vision.sh` → `python Best_Contour.py -cfg ./configs/vision/<env_type>.yaml` | 物块识别，窗口内容见下面的"视觉窗口" |
-| `pick-place` | `bash run_pick_place.sh` | 搭积木控制（`adjust 0/1`、`go <p1> <p2>`，加 `open-place` 为开环放置） |
+| `pick-place` | `bash run_pick_place.sh` | 搭积木控制（`adjust 0/1`、`go <p1> <p2>`，加 `open-place` 为开环放置，加 `place-stop ε` 为不对称的放置停下条件，加 `no-scene` 为不用规划场景、按原来的固定路点移动） |
 | `record` | `python data_driven/record_data.py` | 录制演示数据 |
 
 `pixi task list` 可以随时查看。
@@ -124,8 +130,9 @@ pixi run vision -vd 2                 # 终端 3
 | 黄色轮廓 | 通过筛选的候选 |
 | 红色粗框 `target` | 选中的目标：候选里离品红十字最近的一个 |
 | 品红十字 | 参考点（`EXPECT_X`, `EXPECT_PICK_REF`）。Pick 阶段要把目标中心对到这里；两个阶段的 x 偏差都相对它计算 |
-| 品红横线 `edge ref`（Place） | 塔顶物块上边沿的期望位置 `EXPECT_PLACE_REF` |
-| 青色横线（Place） | 塔顶物块上边沿的当前位置；y 偏差 = 品红横线 − 青色横线 |
+| 品红横线 `edge ref`（Place） | 塔顶物块图像上边沿的期望位置 `EXPECT_PLACE_REF`（图像上边沿：图像里最上面的那条边，实际是物块的下边沿） |
+| 青色横线（Place） | 塔顶物块图像上边沿的当前位置；y 偏差 = 品红横线 − 青色横线 |
+| 橙色框 `held`（Place，`--held-cube` 或 `-t pl0/pl1`） | 手里的物块；左上第 3 行为它的中心 x、图像上边沿，以及品红横线（图像上边沿的对准目标）因此移动了多少 |
 | 调暗的区域（Place） | 不参与识别：第 423 行以下（真机和本仓库的仿真都会裁），以及 `PLACE_CROP_X` 以外的列 |
 
 ### 机械臂服务地址
@@ -148,7 +155,7 @@ ARM_URL=192.168.1.10 ARM_PORT=50051 pixi run bringup
 
 **记录位置**：和桌面上一样，按手册 §7 用 `pixi run keyboard` 把夹爪移到位、按 `=` 读数，填进 `configs/control/real.yaml`。读到的都是基座坐标系里地面上方的值，**不需要量桌高**。
 
-- `PICK_POSITION_*`、`PICK_GRASP_Z`：抓取区的扫描位姿和下抓高度。
+- `PICK_POSITION_*`、`PICK_GRASP_Z`：抓取区的扫描位姿和下抓高度。高度都是指尖的高度（末端点 `custom_end_link` 在两指的指尖），`PICK_GRASP_Z` 就是下抓时指尖离桌面的距离。
 - `PLACE_POSITION_Z`：第一块的松开高度。地面往往不平，塔下面和抓取区可能差几毫米，这时在放置点把夹爪降到地面上的物块处单独记下；之后每一层都在它上面加 `CUBE_HEIGHT`。
 
 **可选项**（`real.yaml` 里以注释列出，默认不启用）：
@@ -163,6 +170,8 @@ ARM_URL=192.168.1.10 ARM_PORT=50051 pixi run bringup
 
 用 MuJoCo 仿真代替机械臂容器，其他终端的命令和真机相同。`bringup` 会自动发现仿真中的机械臂，各程序改用 `configs/*/sim.yaml`；抓取区的物块被抓完后会自动重新摆放。
 
+机械臂和夹爪的模型（网格、小臂长度、底板）取自 DISCOVERSE 最新的 airbot_play 模型，MoveIt 和仿真用同一份 URDF（来源见 `ros_ws/src/airbot_play_models/*/SOURCE.md`）；腕部相机的安装位置沿用原来的仿真。机械臂立在 275 × 161 mm 的底板上，底板整块放在桌面上，前沿和桌沿齐平。末端点 `custom_end_link` 在两指的指尖，配置里的高度都是指尖的高度。真机（新款，小臂 290 mm）也用这份模型：`configs/control/real.yaml` 里是期望位姿，换模型后不用改。和以前（旧模型，末端点在指尖上方 5.6 mm）相比，真机指尖实际到达的位置：抓取处前移约 17 mm，塔处偏约 (+14, +11) mm；扫描、下抓和低层放置的高度相差不到 1.5 mm，所以 `configs/vision/real.yaml` 的参考值仍然可用；在 MoveIt 里竖直上升能到的高度变低，塔的上限从 7 块变成 6 块。
+
 ```bash
 pixi run sim                     # 终端 0：仿真（代替 airbot_server），打开 MuJoCo 窗口
 pixi run bringup                 # 终端 1
@@ -175,7 +184,7 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 | 操作 | 方法 |
 |------|------|
 | 拿起、放下物块 | 双击选中物块，按住 Ctrl 加右键拖动（加 Shift 时沿地面 / 桌面移动），Ctrl 加左键拖动转动它。松手后物块端正地放在它下面的东西上（地面、桌面或另一块物块），所以也可以手工往塔上放 |
-| 移动机械臂在桌上的安装位置 | 双击选中机械臂底座，Ctrl 加右键拖动，整台机械臂在桌面上平移（不能离开桌面；会撞到桌子时不动）。和真机一样只有机械臂动，桌子、地面上的标记和物块不动，所以 `configs/control/sim.yaml` 里记录的位置要按手册 §7 重新记录。`pixi run sim-ctl arm save` 把当前位置写进场景文件（`MOUNT_OFFSET`），下次启动沿用 |
+| 移动机械臂在桌上的安装位置 | 双击选中机械臂底座，Ctrl 加右键拖动，整台机械臂在桌面上平移（底板不能离开桌面；会撞到桌子时不动）。和真机一样只有机械臂动，桌子、地面上的标记和物块不动，所以 `configs/control/sim.yaml` 里记录的位置要按手册 §7 重新记录。`pixi run sim-ctl arm save` 把当前位置写进场景文件（`MOUNT_OFFSET`），下次启动沿用 |
 
 | 任务 | 说明 |
 |------|------|
@@ -190,7 +199,7 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 | 任务 | 说明 |
 |------|------|
 | `test` | 单元测试和机械臂驱动的契约测试（仿真驱动连不开窗口的仿真，`airbot_py` 驱动连假的 `airbot_server`），不需要 ROS。GitHub Actions 上也跑这一项 |
-| `test-e2e <场景>` | 在仿真里跑完整流程（独立的 ROS master，不影响正在运行的程序），日志和结果在 `runs/e2e/`。场景：`floor`（地面搭 6 块）、`open-place`（同上，开环放置）、`limit`（真机布局搭到上限，按回车回 Home）、`baseline`（改动前的程序，应在第 7 块后卡住）、`kill-sim`（中途关掉仿真）、`golden`（改动前后发给 MoveIt 的运动目标对比） |
+| `test-e2e <场景>` | 在仿真里跑完整流程（独立的 ROS master，不影响正在运行的程序），日志和结果在 `runs/e2e/`。场景：`floor`（地面搭 6 块）、`open-place`（同上，开环放置）、`held-cube`（同上，视觉加 `--held-cube`；`floor`、`held-cube` 可再加 `--place-stop 0.5`；`floor`、`open-place`、`held-cube`、`limit`、`golden` 可再加 `--no-scene`）、`limit`（真机布局搭到上限，按回车回 Home）、`baseline`（改动前的程序，应在第 6 块后卡住；真机用旧模型时是第 7 块）、`kill-sim`（中途关掉仿真）、`golden`（改动前后发给 MoveIt 的运动目标对比） |
 
 ## 目录结构
 

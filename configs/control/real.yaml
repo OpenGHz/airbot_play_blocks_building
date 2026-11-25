@@ -1,5 +1,6 @@
 # 控制参数（真机）。长度单位 m，角度单位 rad，坐标都在机械臂基座坐标系（x 向前，y 向左，z 向上）。
 # 位置按手册 §7 用键盘（pixi run keyboard）把夹爪移到位、按 = 读数后填写。
+# 末端点（URDF 的 custom_end_link）在两指的指尖，下面的高度都是指尖的高度。
 
 # 抓取扫描位姿：夹爪在抓取区上方，相机看着抓取区
 PICK_JOINT: AUTO        # 抓取扫描位姿的关节角；AUTO 为由下面的位姿逆解得到
@@ -9,7 +10,7 @@ PICK_POSITION_Z: 0.04
 PICK_ROLL: 0
 PICK_PITCH: 1.570796    # 夹爪竖直向下
 PICK_YAW: 0
-PICK_GRASP_Z: 0.015     # 下抓时末端的高度
+PICK_GRASP_Z: 0.015     # 下抓时指尖离桌面的高度
 
 # 放置位置（塔的位置）
 PLACE_POSITION_X: 0.2734

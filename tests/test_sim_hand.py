@@ -131,7 +131,7 @@ def test_mount_stays_on_the_table(world):
 def test_mount_refuses_to_put_the_arm_into_the_table(world):
     w = world
     arm = kin.Arm(w.model, mujoco.MjData(w.model), w.base)
-    q = arm.ik([0.25, 0.0, -0.48], restarts=60)  # reaching down to the floor in front of the table
+    q = arm.ik([0.25, 0.0, -0.46], restarts=60)  # reaching down to the floor in front of the table
     assert q is not None
     scene.set_arm(w.model, w.data, q, scene.FINGER_OPEN)
     mujoco.mj_forward(w.model, w.data)

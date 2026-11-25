@@ -7,14 +7,23 @@ program. It watches the simulation, answers the program's prompts, and writes th
 report.json to runs/e2e/<scenario>_<time>/.
 
 Scenarios
-  floor     configs/control/sim.yaml, floor scene; stop after --blocks blocks (default 6).
+  floor     configs/control/sim.yaml, floor scene; stop after --blocks blocks (default 6) with Ctrl+C;
+            the program must exit with status 0.
   open-place  the same with `--open-place`: no vision in the place stage, each block is released
             right over the first one.
+  held-cube the same as floor with the vision's `--held-cube`: the place stage also finds the
+            held cube and aligns it, not the gripper, with the tower's top block.
+  --place-stop PX (floor, held-cube): also run the program with `--place-stop PX`: the place
+            stage stops only when the remaining move along the approach is below PX pixels.
+  --no-scene (floor, open-place, held-cube, limit, golden): run the program with `--no-scene`, the
+            old fixed waypoints instead of the planning scene. The transfers then stop between
+            waypoints, so floor-like scenarios do not require transfers without stops; golden
+            compares the old program with the new one's --no-scene path.
   limit     configs/control/real.yaml, tabletop scene (the real robot's layout, tower on the
             other side of the pick area): build until the arm cannot go higher, answer the
-            prompt with Enter. Expected: 7 blocks, back Home, exit status 0.
+            prompt with Enter. Expected: LIMIT_BLOCKS (6) blocks, back Home, exit status 0.
   baseline  the program before the changes (git 7a1c2c2) in the same setup. Expected (plan
-            §1.1): it freezes after block 7, with a "bad callback" in its log.
+            §1.1): it freezes after block LIMIT_BLOCKS (6), with a "bad callback" in its log.
   kill-sim  floor scene; kill the simulation while the arm carries block 3. Expected: the
             program says what happened and does not hang.
   golden    zero vision offset, tabletop scene, real.yaml: record every motion target of the
@@ -56,6 +65,9 @@ from sim.driver import DriverError, MujocoDriver  # noqa: E402
 OLD_COMMIT = "7a1c2c2"
 PROMPT_FAULT = "按回车回 Home"
 PROMPT_REFILL = "补充物块后按回车"
+STALL_LIMIT = 10.0  # s without an answer from the simulation (connection still open) before the monitor gives up
+LIMIT_BLOCKS = 6  # limit / baseline: blocks before the vertical rise over the tower fails (real robot, old
+                  # model: 7, plan §1.1; the DISCOVERSE model's forearm is 18 mm shorter, so the limit comes a block earlier)
 CLOSED_WIDTH = 0.045  # gripper narrower than this: closed (on a cube ~0.025, empty ~0)
 
 
@@ -171,6 +183,9 @@ class Monitor(threading.Thread):
         self.fingers = [m.body(n).id for n in scene.FINGER_BODIES]
         self.finger_q = [m.joint(j).qposadr[0] for j in scene.FINGER_JOINTS]
         self.samples = []  # (t, eef xyz, width, moving joints)
+        self.held = []  # per sample: held cube centre minus end effector (m) and its tilt (deg); NaN when none
+        self.qpos = []  # per sample: the whole simulation state (arm, fingers, cubes), to replay a run
+        self.cube_ids = np.array(list(self.cubes))
         self.clearance = []  # (t, distance, robot geom, tower cube) outside the work zone at the tower top
         self.events = []
         self.tower_count = 0
@@ -196,10 +211,16 @@ class Monitor(threading.Thread):
             self.error = str(e)
             return
         last_q, k = None, 0
+        silent_since = None  # the simulation can stall for a few seconds (refilling the pick area under load)
         while not self.stop_flag.is_set():
             try:
                 qpos = drv.request("get_qpos", timeout=2.0)["qpos"]
+                silent_since = None
             except DriverError as e:
+                now = time.monotonic()
+                silent_since = silent_since or now
+                if drv.ok() and now - silent_since < STALL_LIMIT:
+                    continue
                 self.error = str(e)
                 self.log(f"lost the simulation: {e}")
                 break
@@ -211,10 +232,25 @@ class Monitor(threading.Thread):
             last_q = q
             eef = self.d.xpos[self.eef] - self.base
             self.samples.append((t, eef.copy(), self.width(), moving))
+            self.held.append(self.held_cube())
+            self.qpos.append(np.asarray(qpos, dtype=np.float32))
             self.step(t, eef, k % 5 == 0)
             k += 1
             time.sleep(0.02)
         drv.disconnect()
+
+    def held_cube(self) -> list:
+        """The cube between the closed fingers: centre minus end effector (m, base axes) and tilt (deg)."""
+        if self.width() >= CLOSED_WIDTH:
+            return [math.nan] * 4
+        rel = self.d.xpos[self.cube_ids] - self.d.xpos[self.eef]  # the finger bodies' origins are 2 cm up, at the finger roots
+        dist = np.linalg.norm(rel, axis=1)
+        if dist.min() > 0.015:
+            return [math.nan] * 4
+        b = self.cube_ids[dist.argmin()]
+        rel = rel[dist.argmin()]
+        tilt = math.degrees(math.acos(min(1.0, abs(float(self.d.xmat[b].reshape(3, 3)[2, 2])))))
+        return [*rel, tilt]
 
     def step(self, t, eef, check_clearance: bool):
         m, d = self.m, self.d
@@ -289,7 +325,8 @@ class Monitor(threading.Thread):
         from_bottom = np.linalg.norm(xy - xy[0], axis=1) * 1000
         steps = np.linalg.norm(np.diff(xy, axis=0), axis=1) * 1000
         return {"offset_from_bottom_mm": [round(float(v), 1) for v in from_bottom],
-                "max_step_mm": round(float(steps.max()), 1)}
+                "max_step_mm": round(float(steps.max()), 1),
+                "xy_base": [[round(float(v), 5) for v in p - self.base[:2]] for p in xy]}  # bottom to top, base frame (m)
 
     def stationary_for(self) -> float:
         """Seconds the arm joints have not moved."""
@@ -373,14 +410,14 @@ def old_worktree() -> pathlib.Path:
 
 def run(name: str, scene_name: str, env_type: str, program: str = "new", vision: str = "camera",
         record: bool = False, out: pathlib.Path | None = None, policy=None, timeout: float = 900.0,
-        args: tuple = ()) -> dict:
+        args: tuple = (), vision_args: tuple = ()) -> dict:
     out = out or REPO / "runs/e2e" / f"{name}_{time.strftime('%Y%m%d_%H%M%S')}"
     out.mkdir(parents=True, exist_ok=True)
     cfg = scene.load_config(scene_name)
     control = config_file.load(REPO / f"configs/control/{env_type}.yaml")
     stack = Stack(out)
-    report = {"scenario": name, "scene": scene_name, "control": env_type, "program": program, "vision": vision,
-              "out": str(out.relative_to(REPO))}
+    report = {"scenario": name, "scene": scene_name, "control": env_type, "program": program,
+              "vision": " ".join([vision, *vision_args]), "out": str(out.relative_to(REPO))}
     print(f"[e2e] {name}: logs in {report['out']}", flush=True)
     monitor = None
     try:
@@ -402,7 +439,7 @@ def run(name: str, scene_name: str, env_type: str, program: str = "new", vision:
         stack.rosparam("set", "/control_param2", 100)
         if vision == "camera":
             stack.start("vision", [sys.executable, "Best_Contour.py", "-cfg", "./configs/vision/sim.yaml",
-                                   "-vd", "/camera/color/image_raw", "-ns"])
+                                   "-vd", "/camera/color/image_raw", "-ns", *vision_args])
             if not stack.wait_for("vision", "开始获取图像", 60):
                 raise RuntimeError("the vision did not start (vision.log)")
         else:
@@ -444,7 +481,8 @@ def run(name: str, scene_name: str, env_type: str, program: str = "new", vision:
     if monitor is not None:
         if monitor.samples:  # raw data, to look at a run again without repeating it
             np.savez_compressed(out / "samples.npz", t=[x[0] for x in monitor.samples], eef=[x[1] for x in monitor.samples],
-                                width=[x[2] for x in monitor.samples], clearance=np.array([c[:2] for c in monitor.clearance]))
+                                width=[x[2] for x in monitor.samples], clearance=np.array([c[:2] for c in monitor.clearance]),
+                                held=np.array(monitor.held), qpos=np.array(monitor.qpos))
         scan = np.array([control["PICK_POSITION_X"], control["PICK_POSITION_Y"], control["PICK_POSITION_Z"]])
         report["events"] = monitor.events
         report["tower_disturbed"] = [e for e in monitor.events if "tower disturbed" in e[1]]
@@ -599,29 +637,42 @@ def summary(r: dict, tower: bool = True) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split("\n\n", 1)[1])
-    ap.add_argument("scenario", choices=["floor", "open-place", "limit", "baseline", "kill-sim", "golden"])
-    ap.add_argument("--blocks", type=int, default=6, help="floor, open-place: stop after this many blocks")
+    ap.add_argument("scenario", choices=["floor", "open-place", "held-cube", "limit", "baseline", "kill-sim", "golden"])
+    ap.add_argument("--blocks", type=int, default=6, help="floor, open-place, held-cube: stop after this many blocks")
+    ap.add_argument("--place-stop", type=float, metavar="PX", help="floor, held-cube: run the program with --place-stop PX")
+    ap.add_argument("--no-scene", action="store_true", help="floor, open-place, held-cube, limit, golden: run the program "
+                                                             "with --no-scene (the old fixed waypoints)")
     args = ap.parse_args()
-    if args.scenario in ("floor", "open-place"):
+    no_scene = ("--no-scene",) if args.no_scene else ()
+    suffix = "-noscene" if args.no_scene else ""
+    if args.scenario in ("floor", "open-place", "held-cube"):
         extra = ("--open-place",) if args.scenario == "open-place" else ()
-        r = run(args.scenario, "floor", "sim", policy=stop_after(args.blocks), args=extra)
-        ok = r["blocks"] >= args.blocks and not r["tower_disturbed"] and r["stops_in_transfers"] == 0
+        name = args.scenario
+        if args.place_stop is not None and args.scenario != "open-place":
+            extra, name = ("--place-stop", str(args.place_stop)), f"{args.scenario}-stop{args.place_stop:g}"
+        vision_extra = ("--held-cube",) if args.scenario == "held-cube" else ()
+        r = run(name + suffix, "floor", "sim", policy=stop_after(args.blocks), args=extra + no_scene, vision_args=vision_extra)
+        # exit 0 after the Ctrl+C that ends the run: it used to abort now and then (-6) when a MoveIt call
+        # returned while Python shut down (the end of airbot_play_pick_place.py)
+        ok = r["blocks"] >= args.blocks and not r["tower_disturbed"] and (args.no_scene or r["stops_in_transfers"] == 0) \
+            and r["pick_place_exit"] == 0
     elif args.scenario == "limit":
-        r = run("limit", "tabletop", "real", policy=answer_enter)
-        ok = r["pick_place_exit"] == 0 and r["fault_prompts"] == 1 and r["blocks"] == 7 and not r["tower_disturbed"]
+        r = run("limit" + suffix, "tabletop", "real", policy=answer_enter, args=no_scene)
+        ok = r["pick_place_exit"] == 0 and r["fault_prompts"] == 1 and r["blocks"] == LIMIT_BLOCKS and not r["tower_disturbed"]
     elif args.scenario == "baseline":
         r = run("baseline", "tabletop", "real", program="old", policy=detect_freeze())
-        ok = bool(r.get("freeze")) and r["bad_callback"] and r.get("freeze_after_blocks") == 7
+        ok = bool(r.get("freeze")) and r["bad_callback"] and r.get("freeze_after_blocks") == LIMIT_BLOCKS
     elif args.scenario == "kill-sim":
         r = run("kill-sim", "floor", "sim", policy=kill_sim_during(3))
         ok = bool(r.get("killed_sim")) and r.get("pick_place_ended_after_s") is not None and r["pick_place_exit"] not in (0, None)
     else:
         stamp = time.strftime("%Y%m%d_%H%M%S")
-        base = REPO / "runs/e2e" / f"golden_{stamp}"
+        base = REPO / "runs/e2e" / f"golden{suffix}_{stamp}"
         runs = {}
         for program in ("old", "new"):
             runs[program] = run(f"golden-{program}", "tabletop", "real", program=program, vision="zero", record=True,
-                                out=base / program, policy=detect_freeze(15, need_blocks=False))
+                                out=base / program, policy=detect_freeze(15, need_blocks=False),
+                                args=no_scene if program == "new" else ())
             print(summary(runs[program], tower=False), flush=True)
         cmp = compare(load_motion(base / "old/motion.jsonl"), load_motion(base / "new/motion.jsonl"))
         (base / "compare.json").write_text(json.dumps(cmp, ensure_ascii=False, indent=1))

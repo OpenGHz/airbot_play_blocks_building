@@ -5,6 +5,8 @@ All lengths are in metres, in the robot base frame.
 
 from __future__ import annotations
 
+import math
+
 FLOOR_MARGIN = 0.005  # the floor's top is this much below the lowest cube bottom the config implies
 
 
@@ -98,6 +100,37 @@ def first_place_xy(place_xy, xyzw, shift: float = FIRST_PLACE_SHIFT) -> tuple[fl
     """
     ux, uy = slot_axis(xyzw)
     return place_xy[0] + shift * ux, place_xy[1] + shift * uy
+
+
+def place_aligned(d_xy, approach_xy, near: float, far: float = 2.0, side: float = 2.0) -> bool:
+    """Place-stage stop test with an asymmetric window along the direction the gripper approaches
+    the tower top from (`--place-stop`).
+
+    d_xy: what the vision says the gripper still has to move, base frame (px). approach_xy: unit
+    vector of the approach (from block 2 on the gripper starts FIRST_PLACE_SHIFT short of the tower
+    along the finger gap, so this is the slot axis). The step gain is below 1, so the remaining move
+    along the approach shrinks without changing sign and only the near edge of a symmetric window is
+    ever reached; that edge is a bias every layer repeats. Stop when the remaining move along the
+    approach is below `near`, or has overshot by less than `far`, and across it is below `side`.
+    """
+    ux, uy = approach_xy
+    along = d_xy[0] * ux + d_xy[1] * uy
+    across = -d_xy[0] * uy + d_xy[1] * ux
+    return -far < along < near and abs(across) < side
+
+
+def tower_footprint(cube: float, inflate: float, lean: float, axis_xy) -> tuple[float, float, float]:
+    """Horizontal size and yaw of the tower's collision box: `inflate` larger on every side, and
+    `lean` more each way along axis_xy (the finger gap at the place orientation, slot_axis).
+
+    The tower leans along the finger gap only: the fingers centre a block along their opening
+    direction, and the grasp offset and the closed loop's dead-zone bias both lie along the gap.
+    A uniformly leaning tower falls before its top block is one block edge off its bottom one
+    (n blocks stepping s each stand while n * s < edge), so lean = one edge covers any standing
+    tower of that kind, leaning either way.
+    Returns (length along axis_xy, width across it, yaw of axis_xy in rad).
+    """
+    return cube + 2 * (inflate + lean), cube + 2 * inflate, math.atan2(axis_xy[1], axis_xy[0])
 
 
 def slot_exit_targets(eef_xyz, xyzw, distance: float = SLOT_EXIT) -> list[list[float]]:

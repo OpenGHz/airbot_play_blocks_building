@@ -1,8 +1,6 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
-     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
-     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<?xml version='1.0' encoding='utf-8'?>
 <robot name="airbot_play_v3_gripper_gazebo" xmlns:xacro="http://wiki.ros.org/xacro">
+    <!-- Geometry (meshes, base plate, forearm length joint4) from DISCOVERSE d67f47c models/mjcf/manipulator/airbot_play; see ../SOURCE.md -->
     <link name="base_link">
         <inertial>
             <origin xyz="-0.010729 -0.00017015 0.041712" rpy="0 0 0" />
@@ -12,16 +10,40 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/base_link.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/arm_base_1.STL" />
             </geometry>
             <material name="">
-                <color rgba="0.75294 0.75294 0.75294 1" />
+                <color rgba="0.12 0.12 0.12 1" />
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0 0 -0.0015" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/arm_base_0.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.6 1 1 1" />
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="-0.02 0 0.0025" rpy="0 0 0" />
+            <geometry>
+                <box size="0.275 0.1612 0.005" />
+            </geometry>
+            <material name="">
+                <color rgba="0.2 0.2 0.2 1" />
             </material>
         </visual>
         <collision>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/base_link.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/arm_base_1.STL" />
+            </geometry>
+        </collision>
+        <collision name="base_plate">
+            <origin xyz="-0.02 0 0.0025" rpy="0 0 0" />
+            <geometry>
+                <box size="0.275 0.1612 0.005" />
             </geometry>
         </collision>
     </link>
@@ -37,7 +59,7 @@
                 <mesh filename="package://airbot_play_v3_gripper/meshes/link1.STL" />
             </geometry>
             <material name="">
-                <color rgba="0.89804 0.91765 0.92941 1" />
+                <color rgba="0.12 0.12 0.12 1" />
             </material>
         </visual>
         <collision>
@@ -63,16 +85,31 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/link2.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link2_0.STL" />
             </geometry>
             <material name="">
-                <color rgba="0.75294 0.75294 0.75294 1" />
+                <color rgba="0.12 0.12 0.12 1" />
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link2_1.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.93 0.93 0.93 1" />
             </material>
         </visual>
         <collision>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/link2.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link2_0.STL" />
+            </geometry>
+        </collision>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link2_1.STL" />
             </geometry>
         </collision>
     </link>
@@ -92,16 +129,31 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/link3.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link3_0.STL" />
             </geometry>
             <material name="">
-                <color rgba="0.75294 0.75294 0.75294 1" />
+                <color rgba="0.12 0.12 0.12 1" />
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link3_1.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.93 0.93 0.93 1" />
             </material>
         </visual>
         <collision>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/link3.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link3_0.STL" />
+            </geometry>
+        </collision>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link3_1.STL" />
             </geometry>
         </collision>
     </link>
@@ -124,7 +176,7 @@
                 <mesh filename="package://airbot_play_v3_gripper/meshes/link4.STL" />
             </geometry>
             <material name="">
-                <color rgba="1 1 1 1" />
+                <color rgba="0.12 0.12 0.12 1" />
             </material>
         </visual>
         <collision>
@@ -135,7 +187,7 @@
         </collision>
     </link>
     <joint name="joint4" type="revolute">
-        <origin xyz="0.30854 0 0" rpy="3.1416 -1.5708 0" />
+        <origin xyz="0.29015 0 0" rpy="3.1416 -1.5708 0" />
         <parent link="link3" />
         <child link="link4" />
         <axis xyz="0 0 1" />
@@ -150,16 +202,31 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/link5.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link5_0.STL" />
             </geometry>
             <material name="">
-                <color rgba="0.89804 0.91765 0.92941 1" />
+                <color rgba="0.12 0.12 0.12 1" />
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link5_1.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.93 0.93 0.93 1" />
             </material>
         </visual>
         <collision>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/link5.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link5_0.STL" />
+            </geometry>
+        </collision>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/link5_1.STL" />
             </geometry>
         </collision>
     </link>
@@ -182,13 +249,28 @@
                 <mesh filename="package://airbot_play_v3_gripper/meshes/link6.STL" />
             </geometry>
             <material name="">
-                <color rgba="0.69804 0.69804 0.69804 1" />
+                <color rgba="0.12 0.12 0.12 1" />
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/camera_stand.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="0.12 0.12 0.12 1" />
             </material>
         </visual>
         <collision>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
                 <mesh filename="package://airbot_play_v3_gripper/meshes/link6.STL" />
+            </geometry>
+        </collision>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://airbot_play_v3_gripper/meshes/camera_stand.STL" />
             </geometry>
         </collision>
     </link>
@@ -206,18 +288,18 @@
             <inertia ixx="1.8946E-05" ixy="-1.3168E-06" ixz="-6.5528E-07" iyy="2.7277E-05" iyz="-2.0801E-07" izz="1.1981E-05" />
         </inertial>
         <visual>
-            <origin xyz="0 0 0" rpy="0 0 0" />
+            <origin xyz="0 0.00425 0" rpy="3.14159 -1.5708 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/left.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/right.STL" />
             </geometry>
             <material name="">
-                <color rgba="1 1 1 1" />
+                <color rgba="0.12 0.12 0.12 1" />
             </material>
         </visual>
         <collision>
-            <origin xyz="0 0 0" rpy="0 0 0" />
+            <origin xyz="0 0.00425 0" rpy="3.14159 -1.5708 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/left.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/right.STL" />
             </geometry>
         </collision>
     </link>
@@ -235,18 +317,18 @@
             <inertia ixx="1.915E-05" ixy="1.343E-06" ixz="-6.8259E-07" iyy="2.7722E-05" iyz="2.0748E-07" izz="1.2248E-05" />
         </inertial>
         <visual>
-            <origin xyz="0 0 0" rpy="0 0 0" />
+            <origin xyz="0 -0.00425 0" rpy="3.14159 -1.5708 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/right.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/left.STL" />
             </geometry>
             <material name="">
-                <color rgba="1 1 1 1" />
+                <color rgba="0.12 0.12 0.12 1" />
             </material>
         </visual>
         <collision>
-            <origin xyz="0 0 0" rpy="0 0 0" />
+            <origin xyz="0 -0.00425 0" rpy="3.14159 -1.5708 0" />
             <geometry>
-                <mesh filename="package://airbot_play_v3_gripper/meshes/right.STL" />
+                <mesh filename="package://airbot_play_v3_gripper/meshes/left.STL" />
             </geometry>
         </collision>
     </link>
@@ -264,8 +346,10 @@
             <inertia ixx="1E-11" ixy="1E-15" ixz="1E-15" iyy="1E-11" iyz="1E-15" izz="1E-11" />
         </inertial>
     </link>
+    <!-- custom_end_link (the point MoveIt and the task configs use) at the fingertips: link6 z 25.63 mm
+         is the tip of both finger meshes (was 0.02, 5.6 mm above the tips) -->
     <joint name="joint_custom_end" type="fixed">
-        <origin xyz="0 0 0.02" rpy="0 -1.5708 0" />
+        <origin xyz="0 0 0.0256" rpy="0 -1.5708 0" />
         <parent link="link6" />
         <child link="custom_end_link" />
     </joint>
@@ -388,4 +472,3 @@
         </plugin>
     </gazebo>
 </robot>
-

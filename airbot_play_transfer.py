@@ -13,16 +13,21 @@ All heights come from the control config; nothing has to be measured (see
 airbot_play_rules.floor_and_tower_z): the floor top is half a cube plus FLOOR_MARGIN below
 the lower of PICK_GRASP_Z and PLACE_POSITION_Z, the tower bottom half a cube below
 PLACE_POSITION_Z, plus one CUBE_HEIGHT per block.
-The tower box is TOWER_INFLATE larger on every side and on top, to cover a leaning tower
-or a block that was not put down flat.
+The tower box is TOWER_INFLATE larger on every side and on top (a block that was not put down
+flat, the arm not following the planned path exactly), and one more block edge each way along
+the finger gap, the only direction the tower leans in (airbot_play_rules.tower_footprint).
 """
 
 from __future__ import annotations
+
+import math
 
 from geometry_msgs.msg import Pose, PoseStamped
 from moveit_commander import PlanningSceneInterface
 from moveit_msgs.msg import RobotState, RobotTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
+
+from airbot_play_rules import tower_footprint
 
 FLOOR_HALF = 1.0  # half size of the floor (m)
 FLOOR_HOLE = 0.12  # half size of the square left open around the robot base, so the base never touches the floor box
@@ -38,8 +43,12 @@ class TransferError(RuntimeError):
 class TowerScene:
     """Floor, tower and held cube in the MoveIt planning scene."""
 
-    def __init__(self, ns: str, frame: str, floor_z: float, tower_bottom_z: float, cube: float):
+    def __init__(self, ns: str, frame: str, floor_z: float, tower_bottom_z: float, cube: float,
+                 lean_axis=(1.0, 0.0), lean: float = 0.0):
+        """lean_axis: the finger gap at the place orientation (slot_axis); lean: how far the tower may
+        lean each way along it (m)."""
         self.psi = PlanningSceneInterface(ns=ns, synchronous=True)
+        self.tower_size = tower_footprint(cube, TOWER_INFLATE, lean, lean_axis)  # length, width, yaw
         self.frame = frame
         self.floor_z = floor_z
         self.tower_bottom_z = tower_bottom_z
@@ -52,11 +61,11 @@ class TowerScene:
         self.psi.remove_world_object(HELD_CUBE)
         self._add_floor()
 
-    def _pose(self, x, y, z) -> PoseStamped:
+    def _pose(self, x, y, z, yaw: float = 0.0) -> PoseStamped:
         p = PoseStamped()
         p.header.frame_id = self.frame
         p.pose.position.x, p.pose.position.y, p.pose.position.z = x, y, z
-        p.pose.orientation.w = 1.0
+        p.pose.orientation.z, p.pose.orientation.w = math.sin(yaw / 2), math.cos(yaw / 2)
         return p
 
     def _add_floor(self):
@@ -88,8 +97,8 @@ class TowerScene:
             if top <= bottom:
                 self.psi.remove_world_object(TOWER)
                 return
-        side = self.cube + 2 * TOWER_INFLATE
-        self.psi.add_box(TOWER, self._pose(*self.tower_xy, (bottom + top) / 2), (side, side, top - bottom))
+        length, width, yaw = self.tower_size
+        self.psi.add_box(TOWER, self._pose(*self.tower_xy, (bottom + top) / 2, yaw), (length, width, top - bottom))
 
     def hide_tower(self):
         """Take the tower out of collision checking (while working right above it)."""

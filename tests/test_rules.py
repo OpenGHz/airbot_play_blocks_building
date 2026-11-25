@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from airbot_play_rules import (TrackLimit, fingers_beside_top_block, first_place_xy, floor_and_tower_z, release_z,
-                               retreat_sign, slot_axis, slot_exit_targets)
+from airbot_play_rules import (TrackLimit, fingers_beside_top_block, first_place_xy, floor_and_tower_z, place_aligned,
+                               release_z, retreat_sign, slot_axis, slot_exit_targets, tower_footprint)
 
 H = 0.025  # CUBE_HEIGHT
 
@@ -35,9 +35,9 @@ def test_retreat_goes_towards_the_pick_area(pick_y, place_y, sign):
 
 
 def test_floor_and_tower_heights_come_from_the_config():
-    floor, tower = floor_and_tower_z(-0.480, -0.480, H)  # sim.yaml
-    assert floor == pytest.approx(-0.4975)
-    assert tower == pytest.approx(-0.4925)
+    floor, tower = floor_and_tower_z(-0.460, -0.460, H)  # sim.yaml
+    assert floor == pytest.approx(-0.4775)
+    assert tower == pytest.approx(-0.4725)
     # The floor goes under the lower of the grasp and release heights.
     floor, tower = floor_and_tower_z(0.015, 0.010, H)
     assert floor == pytest.approx(0.010 - H / 2 - 0.005)
@@ -126,3 +126,36 @@ def test_fingers_beside_top_block():
     assert fingers_beside_top_block((0.282, 0.213), tower, 0.173, top)  # the limit case: tips below the top
     assert not fingers_beside_top_block((0.282, 0.213), tower, 0.185, top)  # risen clear of it
     assert not fingers_beside_top_block((0.35, 0.10), tower, 0.10, top)  # low, but away from the tower
+
+
+@pytest.mark.parametrize("d, aligned", [
+    ((1.5, 0.0), False),   # still short along the approach: the old |dx| < 2 px would stop here
+    ((0.4, 0.0), True),
+    ((0.0, 0.0), True),
+    ((-1.5, 0.0), True),   # overshot a little: stop rather than step back and forth
+    ((-2.5, 0.0), False),
+    ((0.0, 1.5), True),    # across the approach the old 2 px window is kept
+    ((0.0, -2.5), False),
+])
+def test_place_stop_window_is_asymmetric_along_the_approach(d, aligned):
+    assert place_aligned(d, (1.0, 0.0), near=0.5) is aligned
+
+
+def test_place_stop_window_follows_the_approach_direction():
+    # Gripper yawed 90 deg: the approach (slot axis) is base +y, the window turns with it.
+    u = slot_axis(_quat_down(math.pi / 2))
+    assert u == pytest.approx((0.0, 1.0), abs=1e-9)
+    assert not place_aligned((0.0, 1.5), u, near=0.5)
+    assert place_aligned((0.0, -1.5), u, near=0.5)
+    assert place_aligned((1.5, 0.2), u, near=0.5)
+
+
+def test_tower_box_is_one_edge_longer_each_way_along_the_finger_gap():
+    length, width, yaw = tower_footprint(0.025, 0.01, 0.025, slot_axis(_quat_down(0.0)))
+    assert (length, width) == pytest.approx((0.095, 0.045))
+    assert yaw == pytest.approx(0.0, abs=1e-9)  # shipped configs: the gap is base x
+
+
+def test_tower_box_turns_with_the_gripper_yaw():
+    _, _, yaw = tower_footprint(0.025, 0.01, 0.025, slot_axis(_quat_down(0.4)))
+    assert math.cos(2 * (yaw - 0.4)) == pytest.approx(1.0)  # along the gap, either way round

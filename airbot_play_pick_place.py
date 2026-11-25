@@ -4,16 +4,17 @@ import rospy
 from robot_tools import transformations
 
 import numpy as np
-import math,time,os
+import math,time,os,sys
 from threading import Thread,Event
 from copy import deepcopy
 
 from easy_arm_control.control import RoboticArmAgent, CoordinateTools, ChooseGripper
-from airbot_play_rules import (TrackLimit, fingers_beside_top_block, first_place_xy, floor_and_tower_z, release_z,
-                               retreat_sign, slot_exit_targets)
+from airbot_play_rules import (TrackLimit, fingers_beside_top_block, first_place_xy, floor_and_tower_z, place_aligned,
+                               release_z, retreat_sign, slot_axis, slot_exit_targets)
 from airbot_play_transfer import TowerScene, Transfer
 
 GRIPPER_LINKS = ("link6", "left", "right")  # 抓着的物块可以接触的连杆（airbot_play URDF）
+NO_SCENE_RETREAT = 0.075  # 不用规划场景（--no-scene）时，松开上升后朝抓取区一侧侧移的距离（原来的固定值）
 
 
 class TaskFault(Exception):
@@ -139,25 +140,27 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self._gap_disget = self._gap_place # 检测物块搭建的实际高度时的位置裕量
         rospy.loginfo("gap_place: {}".format(self._gap_place))
 
-    def task_pick_place_param_init(self,area_mode=0,use_tof=False,control_mode='g_i',sim_type=None):
-        """ 初始化搭积木任务的参数 """
-        # 基本外部参数配置
-        self.use_sim = False if sim_type in [None, "real"] else True
-        self.loginfo(f'use_sim={self.use_sim}')
-        self.sim_type = sim_type if sim_type != "real" else None
-        self.pick_place_area_mode = area_mode
+    def task_pick_place_param_init(self,use_scene=True,use_tof=False,control_mode='g_i'):
+        """ 初始化搭积木任务的参数。真机和MuJoCo仿真用同一套代码，差别只在配置文件（configs/control/real.yaml、sim.yaml） """
         self.place_mode = 0  # 放置方式，由PickPlace设置（0闭环，1开环，2键控）
-        # 规划场景：地面和塔作为碰撞体，抓取区与塔之间的转移交给MoveIt绕行（同侧pick&place布局）
-        self._use_scene = area_mode == 1
-        # 第一块的放置位置：实机沿放置姿态下末端z轴（两指之间的空隙方向）多放0.01。原来加在基座x上，
+        # 闭环放置的不对称停下条件（--place-stop）：沿逼近方向剩余偏差小于这么多像素才停；None为原来的 |dx|、|dy| < 2 px
+        self.place_stop = None
+        # 第2块起夹爪从塔沿末端z轴（两指之间的空隙方向）少FIRST_PLACE_SHIFT的一侧逼近
+        self._approach = slot_axis(self.euler_to_quaternion(self._place_rpy))
+        # 规划场景：地面和塔作为碰撞体，抓取区与塔之间的转移交给MoveIt绕行；use_scene为False（--no-scene）时走原来的固定路点
+        self._use_scene = use_scene
+        # 第一块的放置位置：沿放置姿态下末端z轴（两指之间的空隙方向）多放0.01。原来加在基座x上，
         # 放置姿态为rpy(0, pi/2, 0)时两者相同。塔在规划场景里就放在这里
-        self._first_xy = (self._place_xy if self.use_sim
-                          else first_place_xy(self._place_xy, self.euler_to_quaternion(self._place_rpy)))
+        self._first_xy = first_place_xy(self._place_xy, self.euler_to_quaternion(self._place_rpy))
+        floor_z, tower_z = floor_and_tower_z(self._pick_base_z, self._place_z0, self._cube_height)
+        self._tower_bottom_z = tower_z  # 回Home前判断手指是否还在塔顶物块两侧时用（规划场景之外也要）
+        # 直线段（竖直上升、沿手指间的空隙移出）不做碰撞检查，不需要规划场景，--no-scene时也用
+        self._transfer = Transfer(self, None)
         if self._use_scene:
-            floor_z, tower_z = floor_and_tower_z(self._pick_base_z, self._place_z0, self._cube_height)
+            # 塔只会沿两指之间的空隙方向前后倾斜，倾斜量不会超过一个边长（再多就倒了），碰撞体沿这个方向两边各加长一个边长
             self._scene = TowerScene(self.basic_c.get_name_space(), self.basic_c.get_planning_frame(),
-                                     floor_z, tower_z, self._cube_height)
-            self._transfer = Transfer(self, self._scene)
+                                     floor_z, tower_z, self._cube_height, lean_axis=self._approach, lean=self._cube_height)
+            self._transfer.scene = self._scene
             self._scene.set_tower(0, self._first_xy)
             side = retreat_sign(self._pick_y, self._place_xy[1])
             self.loginfo(f'规划场景：地面 z={floor_z:.4f}，塔底 z={tower_z:.4f}；'
@@ -176,11 +179,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self.filter_near_judge = 10  # 多近开启滤波
         # 确定detect位置
         self.use_tof = use_tof
-        if not self.use_sim:  # 实机
-            if self.use_tof: self._place_detect_x = self._place_xy[0] - 0.01
-            else: self._place_detect_x = self._place_xy[0]
-        else:  # 仿真
-            self._place_detect_x = self._place_xy[0]  # 仿真和不使用detect时都跟self._place_xy[0]保持一致
+        self._place_detect_x = self._place_xy[0] - 0.01 if self.use_tof else self._place_xy[0]
 
         """ 初始化PickPlace任务相关参数"""
         self.__jiumin = 0
@@ -461,19 +460,10 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self.basic_c.limit_max_cartesian_link_speed(vel_max, link_name="gripper_link2")
 
     def _motion_optimization(self,always_wait=True):
-        """ 运动控制优化 """
-        if not self.use_sim:  # 实机
-            # 分段限速
-            self._manual_vel_acc_limit(near_dist=640,vel_limit=0.407,acc_limit=1.0)
-            self._manual_vel_acc_limit(near_dist=10, vel_limit=0.2,acc_limit=0.5)
-            self._manual_vel_acc_limit(near_dist=5,vel_limit=0.1,acc_limit=0.1)
-        else:  # 仿真
-            self._manual_vel_acc_limit(near_dist=640,vel_limit=1.0,acc_limit=1.0)
-            self._manual_vel_acc_limit(near_dist=320,vel_limit=0.9,acc_limit=0.5)
-            self._manual_vel_acc_limit(near_dist=160,vel_limit=0.8,acc_limit=0.2)
-            self._manual_vel_acc_limit(near_dist=80, vel_limit=0.5,acc_limit=0.1)
-            self._manual_vel_acc_limit(near_dist=20, vel_limit=0.2,acc_limit=0.01)
-            self._manual_vel_acc_limit(near_dist=10, vel_limit=0.1,acc_limit=0.001)
+        """ 运动控制优化：按偏差大小分段限速 """
+        self._manual_vel_acc_limit(near_dist=640,vel_limit=0.407,acc_limit=1.0)
+        self._manual_vel_acc_limit(near_dist=10, vel_limit=0.2,acc_limit=0.5)
+        self._manual_vel_acc_limit(near_dist=5,vel_limit=0.1,acc_limit=0.1)
 
     def feedback_callback(self,target_message:TransformStamped):  
         if not hasattr(self.feedback_callback,'running'):
@@ -598,37 +588,42 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
 
     def _go_home_and_exit(self):
         """
-            先竖直上升离开塔顶（直线能走多少走多少），再在规划场景（含塔）里回Home；规划不出时停下提示，不硬走。
-            到上限时竖直上升往往走不完，张开的手指还在塔顶物块两侧：这时先沿手指间的空隙水平移出，再规划。
+            先竖直上升离开塔顶（直线能走多少走多少）。到上限时竖直上升往往走不完，张开的手指还在塔顶物块两侧：
+            这时先沿手指间的空隙水平移出。之后在规划场景（含塔）里规划回Home；不用规划场景（--no-scene）时直接回Home。
+            规划不出或移不出时停下提示，不硬走。
         """
         rospy.set_param("/vision_attention", 'pause')
         n = self.built_count()
         try:
+            t = self._transfer
+            self.update_current_state()
+            start = list(self.current_joints)
+            xyz, _, q = self.change_joints_to_pose(start)
+            segs = []
+            rise = t.line(start, [xyz[0], xyz[1], xyz[2] + self._cube_height + 0.01], q, '竖直上升', partial=True)
+            if rise is not None: segs.append(rise)
+            end = t.end(segs[-1]) if segs else start
+            end_xyz = self.change_joints_to_pose(end)[0]
+            holding = self._scene.holding if self._use_scene else self._pick_place_stage == 'place'
+            # 最低点：抓着物块时为物块底面，在指尖（末端点）下方，按下抓时指尖离地 15 mm 算；空手时就是指尖
+            lowest = end_xyz[2] - (0.015 if holding else 0.0)
+            tower_top = self._tower_bottom_z + n * self._cube_height
+            beside = n > 0 and fingers_beside_top_block(end_xyz, self._first_xy, lowest, tower_top)
+            if beside:
+                # 塔顶物块在两根手指之间：只有沿手指间的空隙水平移出才碰不到它（先试朝底座的一端）
+                slide = None
+                for target in slot_exit_targets(end_xyz, q):
+                    try:
+                        slide = t.line(end, target, q, '沿手指间的空隙水平移出')
+                        break
+                    except Exception:  # 这一端够不到，试另一端
+                        continue
+                if slide is None:
+                    raise RuntimeError('手指还在塔顶物块两侧，沿手指间的空隙水平移出也够不到，为免碰倒塔不再移动')
+                segs.append(slide)
+                end = t.end(slide)
             if self._use_scene:
-                t = self._transfer
-                self.update_current_state()
-                start = list(self.current_joints)
-                xyz, _, q = self.change_joints_to_pose(start)
-                segs = []
-                rise = t.line(start, [xyz[0], xyz[1], xyz[2] + self._cube_height + 0.01], q, '竖直上升', partial=True)
-                if rise is not None: segs.append(rise)
-                end = t.end(segs[-1]) if segs else start
-                end_xyz = self.change_joints_to_pose(end)[0]
-                lowest = end_xyz[2] - (0.015 if self._scene.holding else 0.005)  # 物块底面 / 指尖相对末端点的高度（URDF）
-                tower_top = self._scene.tower_bottom_z + n * self._cube_height
-                if n > 0 and fingers_beside_top_block(end_xyz, self._scene.tower_xy, lowest, tower_top):
-                    # 塔顶物块在两根手指之间：只有沿手指间的空隙水平移出才碰不到它（先试朝底座的一端）
-                    slide = None
-                    for target in slot_exit_targets(end_xyz, q):
-                        try:
-                            slide = t.line(end, target, q, '沿手指间的空隙水平移出')
-                            break
-                        except Exception:  # 这一端够不到，试另一端
-                            continue
-                    if slide is None:
-                        raise RuntimeError('手指还在塔顶物块两侧，沿手指间的空隙水平移出也够不到，为免碰倒塔不再移动')
-                    segs.append(slide)
-                    end = t.end(slide)
+                if beside:
                     self._scene.set_tower(n)  # 手指已在塔的侧面，塔按完整的碰撞体（四周和顶部放大）参与规划
                 else:
                     # 手指（或手里的物块）在塔顶上方：塔顶的放大部分只保留到它们下方3mm，起点不算碰撞
@@ -636,6 +631,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
                 segs.append(t.plan_to_joints(end, self.preset_pose['Home'], '回 Home'))
                 t.run(start, segs, vel=0.3, acc=0.3)
             else:
+                if segs: t.run(start, segs, vel=0.3, acc=0.3)
                 self.go_to_named_or_joint_target('Home', sleep_time=1)
         except Exception as e:
             print(f'\n回 Home 失败：{e}\n机械臂停在原地，请用 pixi run keyboard 手动移开后再关闭程序。')
@@ -656,17 +652,9 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
     def judge_and_excute(self):
         if self.__auto_pick_place:
             if self._pick_place_stage == 'pick':
-                if self.sim_type in [None,'isaac','gibson']:
-                    self._Pick_and_Go(stable=True,pick_keyboard=self.__pick_keyboard,place_mode=self.place_mode)
-                elif self.sim_type in ['gazebo','gazebo_fx']:
-                    self._Pick_and_Go(3.7,3.5,stable=True,pick_keyboard=self.__pick_keyboard,place_mode=self.place_mode)
-                else: raise Exception('sim_type参数错误')
+                self._Pick_and_Go(stable=True,pick_keyboard=self.__pick_keyboard,place_mode=self.place_mode)
             if self._pick_place_stage == 'place':  # 不用elif，可以直接当次进入
-                if self.sim_type in [None,'isaac','gibson']:
-                    self._Place_and_Go(stable=True,pick_keyboard=self.__pick_keyboard,place_mode=self.place_mode)
-                elif self.sim_type in ['gazebo','gazebo_fx']:
-                    self._Place_and_Go(3.7,3.5,stable=True,pick_keyboard=self.__pick_keyboard,place_mode=self.place_mode)
-                else: raise Exception('sim_type参数错误')
+                self._Place_and_Go(stable=True,pick_keyboard=self.__pick_keyboard,place_mode=self.place_mode)
         else: self._follow_event.set()  # 仅跟踪，不抓取
 
     def set_control_param(self,mode=0):
@@ -682,46 +670,24 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         else: pik = plc = 0
 
         # 纯像素新版参数调整（将反馈数据转换为self.new_target_xyz和rpy）
-        if self.use_sim:
-            if self._pick_place_stage == 'pick':
-                if pik != 0:
-                    self._set_pixels2meter_xyz_target(k=pik, mindis=0)  # k建议直接实测得到，并根据实际情况进行适当的调整
-                else:
-                    self._set_pixels2meter_xyz_target(k=5555, mindis=0)  # 粗调。仿真中k建议直接实测得到，并根据实际情况进行适当的调整
-                    self._set_const_bias_xyz_target(bias_xyz=0.002, neardis_xyz=20, min_xyz=2)
-                    self._set_const_bias_xyz_target(bias_xyz=0.0005,neardis_xyz=10, min_xyz=2)
-                    self._set_const_bias_xyz_target(bias_xyz=0.0002,neardis_xyz=5, min_xyz=2)
+        if self._pick_place_stage == 'pick':
+            if pik == 0:
+                self._set_pixels2meter_xyz_target(k=6000,mindis=20)  # 粗调。仿真中k建议直接实测得到，并根据实际情况进行适当的调整
+                self._set_const_bias_xyz_target(bias_xyz=0.002, neardis_xyz=20, min_xyz=2)
+                self._set_const_bias_xyz_target(bias_xyz=0.0005,neardis_xyz=10, min_xyz=2)
+                self._set_const_bias_xyz_target(bias_xyz=0.0002,neardis_xyz=5, min_xyz=2)
             else:
-                if plc != 0:
-                    self._set_pixels2meter_xyz_target(k=plc,mindis=0)  # k建议直接实测得到，并根据实际情况进行适当的调整
-                else:
-                    self._set_const_bias_cmd_target(bias_xyz=0.015, neardis_xyz=640,min_xyz=2,bias_rpy=10,  neardis_rpy=180,min_rpy=0.2)
-                    self._set_const_bias_cmd_target(bias_xyz=0.004, neardis_xyz=100,min_xyz=2,bias_rpy=5,neardis_rpy=15,min_rpy=0.2)
-                    self._set_const_bias_cmd_target(bias_xyz=0.002, neardis_xyz=50,min_xyz=2,bias_rpy=2,neardis_rpy=5,min_rpy=0.2)
-                    self._set_const_bias_cmd_target(bias_xyz=0.0013, neardis_xyz=20, min_xyz=2, bias_rpy=1,neardis_rpy=2,min_rpy=0.2)
-                    self._set_const_bias_cmd_target(bias_xyz=0.0008,neardis_xyz=10, min_xyz=2,bias_rpy=0.5,neardis_rpy=1,min_rpy=0.2)
-                    self._set_const_bias_cmd_target(bias_xyz=0.0004,neardis_xyz=5, min_xyz=2,bias_rpy=0.2,neardis_rpy=0.5,min_rpy=0.2)
+                self._set_pixels2meter_xyz_target(k=pik,mindis=0)
+        else:
+            if plc != 0:
+                self._set_pixels2meter_xyz_target(k=plc,mindis=0)  # k建议直接实测得到，并根据实际情况进行适当的调整
+            else:
+                self._set_const_bias_xyz_target(bias_xyz=0.002, neardis_xyz=640, min_xyz=2)
+                self._set_const_bias_xyz_target(bias_xyz=0.001, neardis_xyz=20, min_xyz=2)
+                self._set_const_bias_xyz_target(bias_xyz=0.00025,neardis_xyz=10, min_xyz=2)
+                self._set_const_bias_xyz_target(bias_xyz=0.0001,neardis_xyz=5, min_xyz=2)
+        self.new_target_rpy = self.feedback_target_euler  # rpy（实际只有y有偏差值）直接一次到目标
 
-            self.new_target_rpy = self.feedback_target_euler  # rpy（实际只有y有偏差值）直接一次到目标
-        else:  # 实机参数
-            if self._pick_place_stage == 'pick':
-                if pik == 0:
-                    self._set_pixels2meter_xyz_target(k=6000,mindis=20)  # 粗调。仿真中k建议直接实测得到，并根据实际情况进行适当的调整
-                    self._set_const_bias_xyz_target(bias_xyz=0.002, neardis_xyz=20, min_xyz=2)
-                    self._set_const_bias_xyz_target(bias_xyz=0.0005,neardis_xyz=10, min_xyz=2)
-                    self._set_const_bias_xyz_target(bias_xyz=0.0002,neardis_xyz=5, min_xyz=2)
-                else:
-                    self._set_pixels2meter_xyz_target(k=pik,mindis=0)
-            else:
-                if plc != 0:
-                    self._set_pixels2meter_xyz_target(k=plc,mindis=0)  # k建议直接实测得到，并根据实际情况进行适当的调整
-                else:
-                    self._set_const_bias_xyz_target(bias_xyz=0.002, neardis_xyz=640, min_xyz=2)
-                    self._set_const_bias_xyz_target(bias_xyz=0.001, neardis_xyz=20, min_xyz=2)
-                    self._set_const_bias_xyz_target(bias_xyz=0.00025,neardis_xyz=10, min_xyz=2)
-                    self._set_const_bias_xyz_target(bias_xyz=0.0001,neardis_xyz=5, min_xyz=2)
-            self.new_target_rpy = self.feedback_target_euler  # rpy（实际只有y有偏差值）直接一次到目标
-        
         self.set_target_pose(self.new_target_xyz,self.new_target_rpy,target_base='last')
 
     def __follow(self):
@@ -804,7 +770,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             self.gripper_control(0,sleep_time=0.5)  # 然后发送释放指令
             self._change_pick_place_state('pick',set_vision=not(pick_keyboard))  # 状态切换到pick
         # 闭环控制
-        elif (self._change_pick_place_state.times == 0) or (abs(self.feedback_target_position[0]) < x_bias and abs(self.feedback_target_position[1]) < y_bias and self._first_out == 0):
+        elif (self._change_pick_place_state.times == 0) or (self._place_aligned(x_bias, y_bias) and self._first_out == 0):
             if self._change_pick_place_state.times == 0: self.loginfo("放置首个物块")  # 首次Place
             else:
                 if self.__jiumin == 1:
@@ -830,6 +796,14 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             self._first_place_satisfy = False
             self._follow_event.set()  # 条件不满足，继续调节
 
+    def _place_aligned(self, x_bias, y_bias) -> bool:
+        """ 闭环放置的停下条件：默认 |dx| < x_bias 且 |dy| < y_bias（像素，基座坐标系）；
+        设了 place_stop 时沿逼近方向不对称：剩余偏差小于 place_stop 才停，越过时 x_bias 以内也停 """
+        d = self.feedback_target_position
+        if self.place_stop is None:
+            return abs(d[0]) < x_bias and abs(d[1]) < y_bias
+        return place_aligned(d[:2], self._approach, self.place_stop, far=x_bias, side=y_bias)
+
     def _change_pick_place_state(self,pick_or_place:str, place_mode=True, set_vision=True):
         """ 每个阶段以夹爪的闭合/开启为结束，然后进行状态的change """
         # 内部状态信息切换
@@ -854,21 +828,14 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         scene_return = from_place and self._use_scene
         if scene_return:
             self._return_to_pick()  # 竖直上升 →（可选）侧移 → 规划场景内回到PickJoint，一条轨迹
-        elif from_place:
-            if self.pick_place_area_mode == 0:
-                pose1 = deepcopy(self.last_target_pose.pose)
-                pose1.position.z = self.last_xyz[2] + self._cube_height + 0.01  # 先上升
-                pose2 = deepcopy(pose1)
-                pose2.position.y = self.last_xyz[1] - self._cube_height - 0.01  # 然后向右移动一段距离
-                self.set_and_go_to_pose_target(pose1)
-                self.set_and_go_to_pose_target(pose2)
-            else:  # 实机
-                pose1 = deepcopy(self.last_target_pose.pose)
-                pose1.position.z = self.last_xyz[2] + self._cube_height + 0.01  # 先上升
-                pose2 = deepcopy(pose1)
-                pose2.position.y = self.last_xyz[1] - 0.075  # 然后向右移动一段距离
-                self.set_and_go_to_pose_target(pose1)
-                self.set_and_go_to_pose_target(pose2)
+        elif from_place:  # 不用规划场景（--no-scene）：竖直上升离开塔顶，朝抓取区一侧侧移，再回PickJoint
+            pose1 = deepcopy(self.last_target_pose.pose)
+            pose1.position.z = self.last_xyz[2] + self._cube_height + 0.01  # 先上升
+            pose2 = deepcopy(pose1)
+            # 然后朝抓取区一侧侧移（真机布局的塔在+y，就是原来的向右-y）
+            pose2.position.y = self.last_xyz[1] + retreat_sign(self._pick_y, self._place_xy[1]) * NO_SCENE_RETREAT
+            self.set_and_go_to_pose_target(pose1)
+            self.set_and_go_to_pose_target(pose2)
 
         if use_name:
             if not scene_return:
@@ -877,18 +844,11 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         else: vel_limit = acc_limit = 1.0
 
         # 精确的工作空间移动
-        if self.pick_place_area_mode == 0:
-            suc = self.set_and_go_to_pose_target(self._pick_scan_xyz_dict[self.pick_place_0_1],self._pick_rpy,sleep_time=sleep_time,return_enable=True)
-            if not suc and not use_name:  # 多次规划失败则尝试先进行named移动
-                self.go_to_named_or_joint_target("PickJoint")
-                self.set_and_go_to_pose_target(self._pick_scan_xyz_dict[self.pick_place_0_1],self._pick_rpy,sleep_time=sleep_time)
-            elif not suc: raise RuntimeError('执行pick姿态失败')
-        else:
-            suc = self.set_and_go_to_pose_target(self._pick_scan_xyz_dict[self.pick_place_0_1],self._pick_rpy,sleep_time=sleep_time,return_enable=True,vel_limit=vel_limit,acc_limit=acc_limit)
-            if not suc and not use_name:  # 多次规划失败则尝试先进行named移动
-                self.go_to_named_or_joint_target("PickJoint")
-                self.set_and_go_to_pose_target(self._pick_scan_xyz_dict[self.pick_place_0_1],self._pick_rpy,sleep_time=sleep_time)
-            elif not suc: raise RuntimeError('执行pick姿态失败')
+        suc = self.set_and_go_to_pose_target(self._pick_scan_xyz_dict[self.pick_place_0_1],self._pick_rpy,sleep_time=sleep_time,return_enable=True,vel_limit=vel_limit,acc_limit=acc_limit)
+        if not suc and not use_name:  # 多次规划失败则尝试先进行named移动
+            self.go_to_named_or_joint_target("PickJoint")
+            self.set_and_go_to_pose_target(self._pick_scan_xyz_dict[self.pick_place_0_1],self._pick_rpy,sleep_time=sleep_time)
+        elif not suc: raise RuntimeError('执行pick姿态失败')
 
     def _return_to_pick(self):
         """ 松开后回到PickJoint：竖直上升h+0.01离开塔顶，可选沿y朝抓取区一侧固定侧移，再在规划场景（含塔）里规划回去 """
@@ -926,7 +886,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         start, grasp, q = list(self.last_joint_target), list(self.last_xyz), list(self.last_xyzw)
         if first:
             xy = self._first_xy
-            z_end = self._place_base_z + (self._gap_place if self.use_sim else 0.0)
+            z_end = self._place_base_z
             z_above = self._place_base_z + h
         else:
             # 闭环时到放置点上方，偏差由视觉调节补回；开环没有调节，直接到第一块的正上方
@@ -957,72 +917,49 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             print("Go to place pose (planning scene)." if first else "Go to adjust pose (planning scene).")
             self._go_to_tower(first)
             return
+        # 不用规划场景（--no-scene），或键控、测距时：原来的固定路点
         def prepare(first):  # pick区域先上升，然后调整xy为place时的位置
             pose1 = deepcopy(self.last_target_pose.pose)
             if first: pose1.position.z = self.last_xyz[2] + self._cube_height + 0.01
             else: pose1.position.z = disget_z
             pose2 = deepcopy(pose1)
-            if self.pick_place_area_mode != 1:  # 反向一波
-                pose2.position.x,pose2.position.y = -self._place_xy[0],-self._place_xy[1]
-            elif self.pick_place_area_mode == 1:
-                pose2.position.x,pose2.position.y = self._place_xy[0],self._place_xy[1]
+            pose2.position.x,pose2.position.y = self._place_xy[0],self._place_xy[1]
             self.set_and_go_to_pose_target(pose1)
             self.set_and_go_to_pose_target(pose2)
         if first:
             print("Go to fist place pose.")
             print(self._place_xy, self._place_base_z, self._place_rpy)
             prepare(first)
-            if self.pick_place_area_mode != 1: self.go_to_named_or_joint_target({0:-3})  # 中间段保证轨迹单向性
-            if self.use_sim:
-                self.set_and_go_to_pose_target([*self._place_xy,self._place_base_z+self._gap_place],self._place_rpy,sleep_time=1)
-            else:  # 实机由于各种误差因素需要更细致的控制
-                # self.speed_control(0.4,0.5)
-                self.set_and_go_to_pose_target([*self._first_xy,self._pick_base_z+self._cube_height],self._place_rpy,sleep_time=0.5,vel_limit=0.4,acc_limit=0.2)  # 先保证xy对正，放置卡位造成xy无法到达目标引起偏差
-                # self.speed_control(0.4,0.5)
-                self.set_and_go_to_pose_target([*self._first_xy,self._place_base_z],self._place_rpy,sleep_time=1,vel_limit=0.2,acc_limit=0.2)
+            # 由于各种误差因素需要更细致的控制：先保证xy对正，放置卡位造成xy无法到达目标引起偏差
+            self.set_and_go_to_pose_target([*self._first_xy,self._pick_base_z+self._cube_height],self._place_rpy,sleep_time=0.5,vel_limit=0.4,acc_limit=0.2)
+            self.set_and_go_to_pose_target([*self._first_xy,self._place_base_z],self._place_rpy,sleep_time=1,vel_limit=0.2,acc_limit=0.2)
             return
+        disget_z = self._place_base_z + self._gap_disget
+        if place_mode == 2: disget_z += 0.025  # 键控时要留够余量
+        # 首先在pick的区域抬高到进行高度测量时的高度（这样可以避免移动时碰到其它物块）
+        prepare(first)
+        # 然后移动到place区域顶层物块的高度测量处（以全过程不碰到顶层物块为宜）
+        print("Go to detect pose.")
+        if place_mode == 2:
+            self.set_and_go_to_pose_target([*self._place_xy, disget_z], self._place_rpy)
+            return
+        # 闭环时到放置点上方，偏差由视觉调节补回；开环没有调节，直接到第一块的正上方（和规划场景时相同）
+        xy = self._first_xy if place_mode == 1 else self._place_xy
+        if use_tof:
+            self.set_and_go_to_pose_target([self._place_detect_x,xy[1],disget_z],self._place_rpy,sleep_time=2,vel_limit=0.4,acc_limit=0.2)
         else:
-            disget_z = self._place_base_z + self._gap_disget
-            if place_mode == 2: disget_z += 0.025  # 键控时要留够余量
-            # 首先在pick的区域抬高到进行高度测量时的高度（这样可以避免移动时碰到其它物块）
-            prepare(first)
-            # 然后移动到place区域顶层物块的高度测量处（以全过程不碰到顶层物块为宜;由于实机转向的限位，因此分成两段，保证转向始终沿俯视的逆时针方向，这也符合大多数机械臂的实际转动情况）
-            print("Go to detect pose.")
-            if place_mode == 2:
-                self.set_and_go_to_pose_target([*self._place_xy, disget_z], self._place_rpy)
-                return
-            if use_tof:
-                self.set_and_go_to_pose_target([self._place_detect_x,self._place_xy[1],disget_z],self._place_rpy,sleep_time=2,vel_limit=0.4,acc_limit=0.2)
-            else:
-                if self.sim_type in [None, 'real', 'isaac','gibson','gazebo_fx', 'gazebo']:
-                    print(self._place_xy, disget_z, self._place_rpy)
-                    self.set_and_go_to_pose_target([*self._place_xy, disget_z], self._place_rpy,sleep_time=1,vel_limit=0.4,acc_limit=0.2)
-                # elif self.sim_type == 'gazebo':
-                #     # self.set_and_go_to_pose_target([self._place_xy[0],self._place_xy[1]+0.015*(disget_z/0.02-24),disget_z],self._place_rpy,sleep_time=1,vel_limit=0.4,acc_limit=0.2)
-                #     self.set_and_go_to_pose_target([self._place_xy[0]-0.01, self._place_xy[1], disget_z], self._place_rpy,sleep_time=1,vel_limit=0.4,acc_limit=0.2)
-                else:
-                    raise Exception(f'sim_type error:{sim_type}')
-            # 停稳后（一定要保证停稳），获取物块此时的配合值（必然大于0且小于(0.025+self._above_gap_disget)，若大于0.025则上次物块搭建是失败了的，为此整轮应进行回退）
-            self.distance_detect(use_sim=self.use_sim, use_tof=use_tof)
-            # 然后移动到可以开始调节的位置
-            print("Go to adjust pose.")
-            adjust_z = disget_z - self.delta_cube_z + self._gap_place
-            if self.use_sim:
-                if self.sim_type in ['isaac','gibson','gazebo_fx','gazebo']:
-                    self.set_and_go_to_pose_target([*self._place_xy, adjust_z],self._place_rpy, sleep_time=2)
-                # elif self.sim_type == 'gazebo':
-                #     # self.set_and_go_to_pose_target([self._place_xy[0],self._place_xy[1]+0.015*(disget_z/0.02-24),adjust_z],self._place_rpy,sleep_time=2,vel_limit=0.004,acc_limit=0.002)
-                #     self.set_and_go_to_pose_target([self._place_xy[0]-0.01,self._place_xy[1], adjust_z],self._place_rpy,sleep_time=2,vel_limit=0.004,acc_limit=0.002)
-                # elif self.sim_type == 'gazebo_fx':
-                #     self.set_and_go_to_pose_target([self._place_xy[0]-0.01,self._place_xy[1], adjust_z],self._place_rpy,sleep_time=2,vel_limit=0.004,acc_limit=0.002)
-                else:
-                    raise Exception(f"sim_type error{self.sim_type}")
-            else:  # 实机当高度增加时，会出现x方向前移的问题，造成下层物块难识别，为此调节位置x方向向后偏移一定距离
-                if place_mode == 0:  # 闭环自动（实机经过一些特殊处理）
-                    self.set_and_go_to_pose_target([self._place_xy[0],self._place_xy[1],adjust_z],self._place_rpy,sleep_time=2)
-                    self.loginfo(f'到达调节位置，开始闭环叠放第{self._change_pick_place_state.times+1}个物块')
-                elif place_mode == 1:  # 开环自动
-                    self.set_and_go_to_pose_target([self._place_xy[0],self._place_xy[1],adjust_z],self._place_rpy,sleep_time=2)
+            print(xy, disget_z, self._place_rpy)
+            self.set_and_go_to_pose_target([*xy, disget_z], self._place_rpy,sleep_time=1,vel_limit=0.4,acc_limit=0.2)
+        # 停稳后（一定要保证停稳），获取物块此时的配合值（必然大于0且小于(0.025+self._above_gap_disget)，若大于0.025则上次物块搭建是失败了的，为此整轮应进行回退）
+        self.distance_detect(use_tof=use_tof)
+        # 然后移动到可以开始调节的位置
+        print("Go to adjust pose.")
+        adjust_z = disget_z - self.delta_cube_z + self._gap_place
+        # 实机当高度增加时，会出现x方向前移的问题，造成下层物块难识别，为此调节位置x方向向后偏移一定距离
+        self.set_and_go_to_pose_target([*xy, adjust_z],self._place_rpy,sleep_time=2)
+        k = self._change_pick_place_state.times
+        self.loginfo(f'到达第一块正上方，开环叠放第{k+1}个物块' if place_mode == 1
+                     else f'到达调节位置，开始闭环叠放第{k+1}个物块')
 
     def monitor_and_change_pick_region(self,__in_thread=False):
         """
@@ -1108,27 +1045,19 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             self.loginfo('监察完毕，退出可夹取物块存在性监察线程')
         else: self.loginfo("非独立线程执行，本次执行无效")
 
-    def distance_detect(self,use_sim=False,use_tof=False,sleep_time=0):
-        """ 距离测量 """
+    def distance_detect(self,use_tof=False,sleep_time=0):
+        """ 距离测量：有测距传感器时测到顶端物块的实际距离，没有时取设定的间隙 """
         if sleep_time > 0: rospy.sleep(sleep_time)
-        if use_sim:
-            if self.sim_type == 'isaac':
-                self.delta_cube_z = rospy.get_param('/cube_delta_z')  # 获得最高物块与次高物块的高度差
-                self.loginfo('开始测量到顶端物块的实际距离')
-            else:
-                self.delta_cube_z = self._gap_disget
-                use_sim = False
-        else:
-            if use_tof:
-                self.loginfo('开始测量到顶端物块的实际距离')
-                tof2cubebottom = 0.01  # 测量得到的tof至夹爪夹取的物块的下底面的距离，可通过简介测量，即测量tof到已放置的物块的距离，减去用卡尺测量到的两物块间隙。
-                dis = rospy.get_param('/distance')
-                self.delta_cube_z = dis - tof2cubebottom
-            else: self.delta_cube_z = self._gap_disget  # 越小越不容易碰到之前的物块- 0.001
+        if use_tof:
+            self.loginfo('开始测量到顶端物块的实际距离')
+            tof2cubebottom = 0.01  # 测量得到的tof至夹爪夹取的物块的下底面的距离，可通过简介测量，即测量tof到已放置的物块的距离，减去用卡尺测量到的两物块间隙。
+            dis = rospy.get_param('/distance')
+            self.delta_cube_z = dis - tof2cubebottom
+        else: self.delta_cube_z = self._gap_disget  # 越小越不容易碰到之前的物块- 0.001
         # 有效性判断
         if self.delta_cube_z < 0 or self.delta_cube_z > (self._cube_height+self._gap_disget):
             raise Exception(f'间隙值异常,叠放失败结束。间隙：{self.delta_cube_z}，超出理论边界[0,{0.025+self._gap_disget}]')
-        elif use_tof or use_sim: self.loginfo(f'得到两物块间隙高度为：{self.delta_cube_z:.3f}'+'m'+'，开始进行高度调整')
+        elif use_tof: self.loginfo(f'得到两物块间隙高度为：{self.delta_cube_z:.3f}'+'m'+'，开始进行高度调整')
 
     def __pick_place_test(self,pick=True,place=True,sleep_time=0.5):
         """通过自行发送0target数据进行过程模拟"""
@@ -1160,67 +1089,47 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser("AIRbotPlay PickPlace param set.")
-    parser.add_argument('-r','--use_real',action='store_true',help='use real robot instead of sim')
+    parser.add_argument('-r','--use_real',action='store_true',help='ignored: the real robot and the MuJoCo simulation run the same code')
     parser.add_argument('-np','--not_auto_pick_place',action='store_true',help='do not auto pick and place')
     parser.add_argument('-na','--not_auto',action='store_true',help='do not auto follow')
     parser.add_argument('-cp','--control_param',type=int,default=-1,help='set control params')
-    parser.add_argument('-g','--gazebo',action='store_true',help='use gazebo instead of isaac sim')
-    parser.add_argument('-gb','--gibson',action='store_true',help='use gibson instead of isaac sim')
-    parser.add_argument('-fx','--fixed',action='store_true',help='use gazebo with fixed base')
     parser.add_argument('-gr','--gripper',type=str,default="gripper",help='gripper type')
     parser.add_argument('--open-place',action='store_true',
                         help='place without the vision: release right over the first block (open loop); picking still tracks')
+    parser.add_argument('--place-stop',type=float,default=None,metavar='PX',
+                        help='closed-loop placing: stop only when the remaining move along the approach is below PX pixels '
+                             '(the far side and across keep 2 px); default: |dx|, |dy| < 2 px')
+    parser.add_argument('--no-scene',action='store_true',
+                        help='move between the pick area and the tower by the old fixed waypoints, without the MoveIt '
+                             'planning scene (floor and tower are not collision-checked)')
     args, unknown = parser.parse_known_args()
 
     NODE_NAME = 'airbot_play_pick_place'
     rospy.init_node(NODE_NAME)
     rospy.loginfo("Initializing {} Node.".format(NODE_NAME))
 
-    sim = not(args.use_real)  # 是否仿真
-    gripper = args.gripper  # 夹爪类型
     auto_follow = not(args.not_auto)  # 是否自动
     auto_pick_place = not(args.not_auto_pick_place)  # 是否自动夹取
-    sim_type = "real" if not sim else 'gazebo' if args.gazebo else 'gibson' if args.gibson else 'isaac'  # 仿真类型
     control_param = args.control_param
-    print(f'sim_type={sim_type}')
 
-    # 选择夹爪类型
-    gripper_sim_type = "gazebo_i" if sim_type == 'gazebo' else sim_type
-    gripper_control = ChooseGripper(gripper_sim_type, gripper)()
-
-    # 根据不同夹爪类型初始化机器人体
-    gripper_type_0 = {None}
-    gripper_type = 4 if sim_type not in gripper_type_0 else 0  # 0表示没有夹爪，4表示有夹爪
-    # other_config = None if sim_type != 'gazebo' else ("", "airbot_play_arm")
-    other_config = None
-    sim_type = 'gazebo_fx' if args.fixed else sim_type  # 最后修改gazebo的fix模式
-    print('new_sim_type:',sim_type)
-    airbot_player = AIRbotPlayPickPlace(init_pose=None,node_name=NODE_NAME,gripper=(gripper_type, gripper_control),other_config=other_config)
+    # 真机和MuJoCo仿真相同：夹爪走 /airbot_play/gripper/set_position，配置为 configs/control/<env_type>.yaml
+    # （bringup按发现的机械臂设置/env_type）
+    gripper_control = ChooseGripper("real", args.gripper)()
+    airbot_player = AIRbotPlayPickPlace(init_pose=None,node_name=NODE_NAME,gripper=(4, gripper_control),other_config=None)
     airbot_player.gripper_control(0)
-
-    # 参数配置
-    env_type = rospy.get_param("/env_type", default=None)
-    if env_type:
-        file_path = f'./configs/control/{env_type}.yaml'
-    elif args.use_real:
-        file_path = './configs/control/real.yaml'
-    elif args.gazebo:
-        file_path = './configs/control/gazebo.yaml'
-    elif args.gibson:
-        file_path = './configs/control/gibson.yaml'
-    else:
-        file_path = './configs/control/isaac.yaml'
+    file_path = f'./configs/control/{rospy.get_param("/env_type", default="real")}.yaml'
     rospy.loginfo(f'load control config from {file_path}')
     airbot_player.load_configs(file_path)
 
-    # 根据真机还是仿真初始化pick & place 任务
-    area_mode_0 = {'isaac'}  # 0表示在一侧pick另一侧place；1表示同侧pick&place
-    area_mode = 1 if sim_type not in area_mode_0 else 0
-    airbot_player.task_pick_place_param_init(area_mode, sim_type=sim_type)
+    airbot_player.task_pick_place_param_init(use_scene=not args.no_scene)
+    if args.no_scene: rospy.loginfo('不用规划场景：抓取区和塔之间按原来的固定路点移动，地面和塔不做碰撞检查')
     # 传入args.control_param参数，则进行参数配置阻塞以及自动夹取控制
     print('args.control_param=', control_param)
     if control_param >= 0: airbot_player.set_control_param(control_param)  # 自调参数（包括pick和place）
     if control_param == 0: auto_pick_place = False  # 不自动夹取（也即相当于仅调节pick阶段）
+    if args.place_stop is not None:
+        airbot_player.place_stop = args.place_stop
+        rospy.loginfo(f'闭环放置的停下条件：沿逼近方向剩余偏差 < {args.place_stop} px（越过时 2 px 以内、横向 2 px 以内）')
     # 自动模式配置
     if auto_pick_place:
         if args.open_place: rospy.loginfo('开环放置：Place阶段不用视觉，到第一块的正上方后直接下降并松开')
@@ -1228,3 +1137,9 @@ if __name__ == "__main__":
     elif auto_follow: airbot_player.AutoFollow()
     rospy.loginfo("{} Node Ready.".format(NODE_NAME))
     airbot_player.wait_for_faults()  # 主线程：动作失败时停在原地，等用户选择回Home或重试
+    # 直接结束进程，不走 Python 的正常退出：后台线程可能正停在 MoveIt 的 C++ 调用里（已释放 GIL），
+    # 解释器收尾时调用返回、重新拿 GIL，Python 3.12 会用 pthread_exit 结束这个线程，栈回退经过 MoveIt
+    # 的 noexcept 析构函数，进程 abort（terminate called without an active exception，退出码 -6；
+    # CPython gh-87135，3.14 才改）。Ctrl+C 时偶发。先把输出刷出去。
+    sys.stdout.flush(); sys.stderr.flush()
+    os._exit(0)

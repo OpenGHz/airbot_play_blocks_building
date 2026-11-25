@@ -9,8 +9,15 @@ HSV2_L: [24, 83, 55]
 HSV2_H: [140, 240, 255]
 
 EXPECT_PICK_REF: 428.0   # Pick：夹爪正下方物块的中心在图像中的 y（像素）
-EXPECT_PLACE_REF: 364.5  # Place：对正时塔顶物块上边沿在图像中的 y（像素）
+EXPECT_PLACE_REF: 364.5  # Place：对正时塔顶物块图像上边沿在图像中的 y（像素；实际是物块的下边沿）
 EXPECT_X: AUTO           # 两个阶段的期望 x（像素）；AUTO 为图像宽度的一半
+
+# 可选：手里的物块，pixi run vision --held-cube 时才用，真机上还没有标定。
+# EXPECT_HELD_REF：在调节位姿上把物块摆在夹爪正中，pixi run vision -t pl0（或 pl1）打印的
+# "手里物块：… 图像上边沿 …"。HELD_SCALE：手里物块和塔顶物块各沿两指空隙方向平移同样的距离，
+# 塔顶物块和手里物块在图像 y 上移动的像素之比；下面是仿真里的值，只作参考。
+# EXPECT_HELD_REF: 415.0
+# HELD_SCALE: 0.86
 
 # Place 阶段单独的 HSV 范围，USE_PLACE_HSV 为 true 时才用
 USE_PLACE_HSV: false

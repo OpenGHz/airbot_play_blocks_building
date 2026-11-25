@@ -5,8 +5,13 @@ simulation with the detection code of Best_Contour.py (std_vision colour filter 
 Contour.NFC_F):
 
   EXPECT_X, EXPECT_PICK_REF  centre of a cube right under the gripper at the pick scan pose
-  EXPECT_PLACE_REF           upper edge of the tower's top cube with the next cube held
+  EXPECT_PLACE_REF           upper edge in the image of the tower's top cube (the topmost
+                             edge in the image; physically the cube's lower edge) with the next cube held
                              GAP_PLACE above it (the adjust pose)
+  EXPECT_HELD_REF            upper edge in the image of the held cube, centred in the gripper,
+                             at the adjust pose (`pixi run vision --held-cube`)
+  HELD_SCALE                 pixels the tower's top cube moves in image y per pixel the held cube
+                             moves, for the same shift along the finger gap (base x here)
 
 --apply writes them into the vision config.
 """
@@ -22,6 +27,7 @@ import numpy as np
 from std_vision.contour import Contour
 from std_vision.video import StdVideo
 
+from Best_Contour import find_held_cube
 from sim import config_file, kin, scene
 
 PLACE_CROP_ROW = 423  # Best_Contour.py keeps rows above this in the place stage
@@ -153,10 +159,49 @@ def main():
         print(f"place on {k:2d} blocks: top cube centre ({res['center'][0]:.1f}, {res['center'][1]:.1f}), upper edge {res['upper_edge']:.1f}")
     place_ref = float(np.median(edges))
     print(f"place-stage tower-top box area {min(areas):.0f} ~ {max(areas):.0f} (AREA_LIMIT_PLACE {vision['AREA_LIMIT_PLACE']})")
+
+    # Held cube (--held-cube): where it is with no grasp offset, and how far the top cube has to move
+    # in the image per pixel the held cube moves. Image x follows base y (finger opening), image y
+    # follows base x (along the finger gap) at this orientation.
+    def place_view(k, top_d=(0.0, 0.0), held_d=(0.0, 0.0)):
+        mujoco.mj_resetData(cam.m, cam.d)
+        for j in range(k):
+            d = top_d if j == k - 1 else (0.0, 0.0)
+            cam.put(cam.cube(names[j % 2], j // 2), (tx + d[0], ty + d[1], z_floor + cam.s + j * h))
+        z_grasp = control["PICK_GRASP_Z"] + k * h + gap
+        cam.put(cam.cube(names[k % 2], k // 2), (tx + held_d[0], ty + held_d[1], z_grasp - 0.0025))
+        cam.pose([tx, ty, z_grasp], hold_q)
+        img = cam.render()
+        top = detect(img, *hsv_place[names[(k - 1) % 2]], vision["AREA_LIMIT_PLACE"], 5.5, (expect_x, pick_ref),
+                     crop=True, crop_x=crop_x)
+        _, held_bin = StdVideo.color_filter(img, *hsv_place[names[k % 2]])
+        if crop_x is not None:
+            held_bin[:, : max(0, int(crop_x[0]))] = 0
+            held_bin[:, int(crop_x[1]) :] = 0
+        held = find_held_cube(held_bin, vision["AREA_LIMIT_PLACE"][0])
+        if top is None or held is None:
+            raise SystemExit(f"held cube: tower of {k}, {'top' if top is None else 'held'} cube not detected")
+        return (top["center"][0], top["upper_edge"]), (held["x"], held["edge"])
+
+    k = 3
+    _, held0 = place_view(k)
+    shifts = np.arange(-4, 5) * 0.001  # a slope over several shifts: one pixel is ~0.5 mm
+    top, held = [], []
+    for v in shifts:  # along the finger gap (base x at this orientation) -> image y
+        top.append(place_view(k, top_d=(v, 0.0))[0][1])
+        held.append(place_view(k, held_d=(v, 0.0))[1][1])
+    top_px_mm = np.polyfit(shifts * 1000, top, 1)[0]
+    held_px_mm = np.polyfit(shifts * 1000, held, 1)[0]
+    scale = round(float(top_px_mm / held_px_mm), 2)
+    print(f"along the finger gap: top cube {top_px_mm:+.2f} px/mm, held cube {held_px_mm:+.2f} px/mm in image y")
+    print(f"held cube centred in the gripper: upper edge {held0[1]:.1f}")
+
     print(f"\nEXPECT_X {expect_x:.1f}  EXPECT_PICK_REF {pick_ref:.1f}  EXPECT_PLACE_REF {place_ref:.1f}")
+    print(f"EXPECT_HELD_REF {held0[1]:.1f}  HELD_SCALE {scale}")
     if args.apply:
         config_file.set_keys(args.vision, {"EXPECT_X": round(expect_x, 1), "EXPECT_PICK_REF": round(pick_ref, 1),
-                                           "EXPECT_PLACE_REF": round(place_ref, 1)})
+                                           "EXPECT_PLACE_REF": round(place_ref, 1),
+                                           "EXPECT_HELD_REF": round(held0[1], 1), "HELD_SCALE": scale}, after="EXPECT_X")
         print(f"written to {args.vision}")
 
 

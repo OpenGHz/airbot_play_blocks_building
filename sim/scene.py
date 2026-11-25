@@ -9,7 +9,10 @@ Two flavours share this module:
     collision and the noslip solver so a grasped cube does not slide out.
 
 The arm comes from the same URDF that MoveIt uses, so the simulated kinematics
-match the planner exactly.
+match the planner exactly. Its geometry (meshes, forearm length, the base plate) is
+DISCOVERSE's latest airbot_play model (ros_ws/src/airbot_play_models/*/SOURCE.md). The arm
+stands on its base plate (collision box "base_plate" of base_link), and the plate lies
+on the table top: the mount keeps the whole plate on the table (`base_plate`, `table_rect`).
 
 Frames. World: the floor is z = 0. Scene frame: the world shifted up by the table
 height; every position in configs/scene/*.yaml (table, tower spot, pick area) is in it.
@@ -49,6 +52,19 @@ EEF_BODY = "custom_end_link"
 FINGER_OPEN, FINGER_GAP_AT_ZERO = 0.0, 0.0715
 
 
+def base_plate() -> tuple[float, float, float]:
+    """The arm's base plate from the URDF (collision box "base_plate" of base_link), base frame:
+    (front, back, half_width) = how far it reaches forward (+x), backward (-x) and to each side (y)."""
+    import xml.etree.ElementTree as ET
+
+    for c in ET.parse(URDF).getroot().iter("collision"):
+        if c.get("name") == "base_plate":
+            x = float(c.find("origin").get("xyz").split()[0])
+            sx, sy, _ = (float(v) for v in c.find("geometry/box").get("size").split())
+            return x + sx / 2, sx / 2 - x, sy / 2
+    raise ValueError(f"{URDF}: no collision box named base_plate")
+
+
 def scene_path(name: str | pathlib.Path | None = None) -> pathlib.Path:
     """A scene name from SCENES (default DEFAULT_SCENE) or a path to a scene file."""
     name = DEFAULT_SCENE if name is None else name
@@ -78,18 +94,23 @@ def table_rect(cfg: dict):
     """Table top outline (x0, x1, y0, y1) in the base frame, and the outward normal
     (unit x, y) of the edge the arm is mounted at.
 
-    MOUNT "side":  the arm faces along the table's depth, its left side flush with
-                   a short edge (the tower is to its left).
-    MOUNT "front": the arm faces out over the middle of a long edge, its front
-                   flush with the edge (the tower is in front of it)."""
+    MOUNT "side":  the arm faces along the table's depth, the left side of its base
+                   plate flush with a short edge (the tower is to its left).
+    MOUNT "front": the arm faces out over the middle of a long edge, the front of its
+                   base plate flush with the edge (the tower is in front of it).
+                   BASE_FRONT (optional) puts the edge that far in front of the base
+                   centre instead; it cannot be closer than the plate's front."""
     depth, width = cfg["TABLE_DEPTH"], cfg["TABLE_WIDTH"]
+    front, _, half_w = base_plate()
     mount = cfg.get("MOUNT", "side")
     if mount == "side":
         x0 = -cfg["SIDE_MOUNT_BACK"]
-        y1 = cfg["BASE_HALF_WIDTH"]
-        return (x0, x0 + depth, y1 - width, y1), (0.0, 1.0)
+        return (x0, x0 + depth, half_w - width, half_w), (0.0, 1.0)
     if mount == "front":
-        x1 = cfg["BASE_FRONT"]
+        x1 = cfg.get("BASE_FRONT", front)
+        if x1 < front - 1e-9:
+            raise ValueError(f"BASE_FRONT {x1} m: the base plate reaches {front:.4f} m in front of the base centre, "
+                             "it would overhang the table edge")
         return (x1 - depth, x1, -width / 2, width / 2), (1.0, 0.0)
     raise ValueError(f"MOUNT must be side or front, not {mount!r}")
 
@@ -306,30 +327,34 @@ def build(cfg: dict | None = None, table_height: float | None = None):
 
 
 FINGER_BODIES = ["left", "right"]
-FINGER_PAD_SPLIT = -0.010  # finger body x (along the finger, towards the tip): the 2 cm wide pad starts here
+# Finger body x (along the finger, towards the tip; the tip is at +25.6 mm) where the collision boxes
+# of a finger split. The finger tapers from 61 mm (along the gap between the fingers) at the root to
+# 17 mm at the tip, so the part a cube touches gets several short boxes that follow the taper.
+FINGER_SPLITS = (-0.030, -0.015, -0.0075, 0.0, 0.0075, 0.015)
 
 
-def _clip_mesh(verts: np.ndarray, faces: np.ndarray, x0: float, keep) -> np.ndarray:
-    """Points of a triangle mesh on one side of the plane x = x0: the vertices kept plus
-    where the triangle edges cross the plane (large faces have vertices only at their ends)."""
-    pts = [verts[keep(verts[:, 0])]]
-    for tri in faces:
-        for i, j in ((0, 1), (1, 2), (2, 0)):
-            a, b = verts[tri[i]], verts[tri[j]]
-            if (a[0] - x0) * (b[0] - x0) < 0:
-                t = (x0 - a[0]) / (b[0] - a[0])
-                pts.append((a + t * (b - a))[None])
-    return np.concatenate(pts) if pts else np.zeros((0, 3))
+def _clip_slab(verts: np.ndarray, faces: np.ndarray, x0: float, x1: float) -> np.ndarray:
+    """Points of a triangle mesh between the planes x = x0 and x = x1: the vertices there plus where
+    the triangle edges cross either plane (the finger mesh has long triangles spanning several slabs)."""
+    pts = [verts[(verts[:, 0] >= x0) & (verts[:, 0] <= x1)]]
+    for xp in (x0, x1):
+        for tri in faces:
+            for i, j in ((0, 1), (1, 2), (2, 0)):
+                a, b = verts[tri[i]], verts[tri[j]]
+                if (a[0] - xp) * (b[0] - xp) < 0:
+                    t = (xp - a[0]) / (b[0] - a[0])
+                    pts.append((a + t * (b - a))[None])
+    return np.concatenate(pts)
 
 
 def build_physics(cfg: dict | None = None):
     """The model `pixi run sim` steps: cube pool, noslip, box fingers. Returns (model, data, cfg)."""
     cfg = cfg or load_config()
     spec = build_spec(cfg, physics=True)
-    # Replace each finger's mesh collision with two boxes around the mesh: the pad near the tip
-    # (2 cm wide) and the wider part higher up, which never gets down to a neighbouring cube.
-    # Box-box contacts give a stable multi-point grasp; mesh hulls give one jittery point and
-    # a hull 6 cm wide at the tip.
+    # Replace each finger's mesh collision with boxes around slabs of the mesh (FINGER_SPLITS): the
+    # tip box "finger_<side>", the root box "finger_<side>_upper" (it never gets down to a neighbouring
+    # cube) and "finger_<side>_<i>" in between. Box-box contacts give a stable multi-point grasp; a mesh
+    # hull gives one jittery point and is 6 cm wide at the tip.
     model = spec.compile()
     boxes = []
     for body in FINGER_BODIES:
@@ -343,10 +368,12 @@ def build_physics(cfg: dict | None = None):
             mujoco.mju_quat2Mat(rot, model.geom_quat[g])
             w = v @ rot.reshape(3, 3).T + model.geom_pos[g]  # vertices in the body frame (x: along the finger)
             faces = model.mesh_face[model.mesh_faceadr[mid] : model.mesh_faceadr[mid] + model.mesh_facenum[mid]]
-            for part, keep in (("", lambda x: x >= FINGER_PAD_SPLIT), ("_upper", lambda x: x <= FINGER_PAD_SPLIT)):
-                pts = _clip_mesh(w, faces, FINGER_PAD_SPLIT, keep)
+            edges = [w[:, 0].min(), *FINGER_SPLITS, w[:, 0].max()]
+            for k, (x0, x1) in enumerate(zip(edges, edges[1:])):
+                pts = _clip_slab(w, faces, x0, x1)
                 if len(pts):
                     lo, hi = pts.min(0), pts.max(0)
+                    part = "_upper" if k == 0 else "" if k == len(edges) - 2 else f"_{k}"
                     boxes.append((body, part, (lo + hi) / 2, (hi - lo) / 2))
     for geom in spec.geoms:
         body = geom.parent.name if hasattr(geom, "parent") else None
@@ -401,13 +428,11 @@ def scene_offset(cfg: dict, table_height: float | None = None) -> np.ndarray:
 
 
 def mount_limits(cfg: dict) -> tuple[float, float, float, float]:
-    """(x0, x1, y0, y1) in the scene frame the arm base centre may be moved within: on the table top,
-    as close to an edge as the scene file's mount is to its edge (the base overhangs that much)."""
+    """(x0, x1, y0, y1) in the scene frame the arm base centre may be moved within: the whole base
+    plate stays on the table top."""
     (x0, x1, y0, y1), _ = table_rect(cfg)
-    m = cfg["BASE_HALF_WIDTH"]
-    if cfg.get("MOUNT", "side") == "front":
-        m = min(m, cfg["BASE_FRONT"])  # the front mount overhangs the edge by BASE_HALF_WIDTH - BASE_FRONT
-    return x0 + m, x1 - m, y0 + m, y1 - m
+    front, back, half_w = base_plate()
+    return x0 + back, x1 - front, y0 + half_w, y1 - half_w
 
 
 def without_mount_offset(cfg: dict) -> dict:

@@ -5,11 +5,11 @@
 PICK_JOINT: AUTO        # 抓取扫描位姿的关节角；AUTO 为由下面的位姿逆解得到
 PICK_POSITION_X: 0.25
 PICK_POSITION_Y: 0.0
-PICK_POSITION_Z: -0.455
+PICK_POSITION_Z: -0.435
 PICK_ROLL: 0
 PICK_PITCH: 1.570796    # 夹爪竖直向下
 PICK_YAW: 0
-PICK_GRASP_Z: -0.480    # 下抓时末端的高度
+PICK_GRASP_Z: -0.460    # 下抓时指尖（末端点）的高度：离地 15 mm（地面在 −0.475，即 configs/scene/sim_floor.yaml 的桌高）
 
 # 放置位置（塔的位置）
 PLACE_POSITION_X: 0.2121
@@ -22,7 +22,7 @@ PLACE_YAW: PICK_YAW
 CUBE_HEIGHT: 0.025
 
 # 抓起后横移时末端的最低高度：PICK_GRASP_Z + CUBE_HEIGHT + 0.01，手里的物块越过抓取区的其他物块
-TRANSIT_Z_MIN: -0.445
+TRANSIT_Z_MIN: -0.425
 
 # 跟踪范围限位：视觉跟踪时末端的 xy 只能在这个矩形内，防止锁定抓取区外或塔上的同色物块。
 # 半边长 = 抓取区半边长 + 3 cm。腕部相机在扫描位姿只看得到夹爪前方，仿真的抓取区（configs/scene/sim_floor.yaml

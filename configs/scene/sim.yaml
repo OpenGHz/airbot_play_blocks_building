@@ -4,11 +4,11 @@ NAME: table
 
 TABLE_HEIGHT: 0.495               # 桌面离地高度；pixi run sim-reach --apply 写入
 TABLE_HEIGHT_RANGE: [0.40, 1.20]  # sim-reach 搜索的桌高范围
-MOUNT: front                      # 机械臂装在桌子的长边（front）或短边（side）
+# 机械臂立在它的底板上，底板（URDF 里 base_link 的碰撞盒 base_plate，275 × 161 mm，来自 DISCOVERSE）整块放在桌面上。
+MOUNT: front                      # 机械臂装在桌子的长边（front，底板前沿和桌沿齐平）或短边（side，底板左边和桌沿齐平）
 TABLE_DEPTH: 0.60
 TABLE_WIDTH: 1.20
-BASE_HALF_WIDTH: 0.058            # 机械臂底座半宽
-BASE_FRONT: 0.05                  # 底座中心到桌沿的距离
+# BASE_FRONT: 0.60                # 可选，长边安装时底座中心到桌沿的距离；不写时底板前沿和桌沿齐平（底座中心离桌沿 0.1175 m）
 SIDE_MOUNT_BACK: 0.20             # 短边安装时底座离桌角的距离
 TABLE_THICKNESS: 0.025
 COLUMN_SIZE: [0.12, 0.08]         # 升降桌立柱的截面

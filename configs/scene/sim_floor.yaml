@@ -4,7 +4,7 @@ BASE: sim.yaml
 NAME: floor
 
 PICK_SURFACE: floor
-TABLE_HEIGHT: 0.495
+TABLE_HEIGHT: 0.475
 TOWER_XY: [0.2121, -0.2121]
 PICK_XY: [0.25, 0.0]
 

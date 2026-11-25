@@ -18,8 +18,9 @@ from std_vision.geometry import Geometry
 OV_FILTERED = (150, 150, 150)  # 灰：被面积或长宽比筛掉的轮廓
 OV_CANDIDATE = (0, 220, 255)   # 黄：通过筛选的候选轮廓
 OV_TARGET = (0, 0, 255)        # 红：选中的目标（候选里离参考点最近的）
-OV_REF = (255, 0, 255)         # 品红：参考点 / Place 阶段上边沿的期望位置
-OV_EDGE = (255, 255, 0)        # 青：Place 阶段塔顶物块上边沿的当前位置
+OV_REF = (255, 0, 255)         # 品红：参考点 / Place 阶段图像上边沿的期望位置
+OV_EDGE = (255, 255, 0)        # 青：Place 阶段塔顶物块图像上边沿的当前位置
+OV_HELD = (0, 140, 255)        # 橙：Place 阶段手里的物块（--held-cube，或测试模式）
 
 
 def _text(img, s, org, color=(255, 255, 255), scale=0.5):
@@ -28,16 +29,49 @@ def _text(img, s, org, color=(255, 255, 255), scale=0.5):
     cv2.putText(img, s, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, 1, cv2.LINE_AA)
 
 
+def find_held_cube(binary, min_area):
+    """
+    Place 阶段手里的物块。binary 是手里物块颜色的二值图（已按 PLACE_CROP_X 裁剪，不按第 423 行裁剪）。
+    手里的物块离相机最近，在图像最下面，所以取下边最低的轮廓（塔里同色的物块在它上面，中间隔着塔顶物块）。
+    返回 dict(box=外接矩形四个顶点, x=中心 x, edge=图像上边沿 y)，没找到时为 None。
+    图像上边沿是图像里最上面的那条边，实际是物块的下边沿，挨着塔顶物块。
+    """
+    cnts, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = [c for c in cnts if cv2.contourArea(c) >= min_area]
+    if not cnts:
+        return None
+    c = max(cnts, key=lambda c: (cv2.boundingRect(c)[1] + cv2.boundingRect(c)[3], cv2.contourArea(c)))
+    x, y, w, h = cv2.boundingRect(c)  # 物块下部常被图像下边裁掉，所以用上边沿和中心 x，不用中心 y
+    return {'box': [[x, y], [x + w - 1, y], [x + w - 1, y + h - 1], [x, y + h - 1]],
+            'x': x + w / 2, 'edge': float(y)}
+
+
+def held_shift(held, expect_held_ref, scale):
+    """
+    手里物块偏离夹爪中心时，塔顶物块图像上边沿的对准目标要移动多少（像素，图像 y）。
+    只修正图像 y，即两指之间的空隙方向；手指开合方向（图像 x）不修正。
+      held             find_held_cube 的结果
+      expect_held_ref  EXPECT_HELD_REF：物块在夹爪正中时 held 的 edge
+      scale            HELD_SCALE：同样的水平位移，塔顶物块和手里物块在图像 y 上移动的像素之比
+                       （手里的物块离相机近，移动得多）
+    手里的物块相对夹爪偏了 e，夹爪就要对到塔顶物块 −e 处，此时塔顶物块在图像里正好偏 scale × 手里物块的偏移。
+    """
+    return scale * (held['edge'] - expect_held_ref)
+
+
 def draw_overlay(frame, attention, binary=None, area_limit=None, ratio_max=None, ref=None,
-                 target=None, keep=None, edge_ref=None):
+                 target=None, keep=None, edge_ref=None, held=None):
     """
     在 Output 窗口的图像上画出这一帧的识别过程（原地修改 frame）。
       attention  /vision_attention：pick0 / pick1 / place0 / place1 / pause
       binary     查找轮廓用的二值图（已裁剪）
       ref        参考点 (x, y)：候选轮廓里离它最近的成为目标；x 方向偏差相对它计算
-      target     None，或 dict(box=四个顶点, offset=(x, y, 角度), edge=上边沿 y 或 None)
+      target     None，或 dict(box=四个顶点, offset=(x, y, 角度), edge=图像上边沿 y 或 None)
       keep       Place 阶段参与识别的区域 (x0, x1, y1)，区域外调暗
-      edge_ref   Place 阶段塔顶物块上边沿的期望位置 EXPECT_PLACE_REF
+      edge_ref   Place 阶段塔顶物块图像上边沿的期望位置 EXPECT_PLACE_REF
+                 （图像上边沿：图像里最上面的那条边，实际是物块的下边沿）
+      held       Place 阶段手里的物块：None 表示没有找它；否则为 find_held_cube 的结果（没找到时为 {}），
+                 加上 shift=图像上边沿对准目标的移动（像素）或 None（只识别、不修正）。edge_ref 传移动后的值
     """
     h, w = frame.shape[:2]
     if attention == 'pause':
@@ -82,40 +116,52 @@ def draw_overlay(frame, attention, binary=None, area_limit=None, ratio_max=None,
     what = 'tower top' if place else 'cube to grasp'
     _text(frame, f'{"PLACE" if place else "PICK"} stage: {what}, colour {color}', (10, 24), scale=0.6)
     _text(frame, status, (10, 48), status_col, 0.55)
+    if held is not None:
+        if held.get('box') is None:
+            _text(frame, 'held cube not found', (10, 72), OV_TARGET, 0.55)
+        else:
+            box = np.int32(held['box'])
+            cv2.drawContours(frame, [box], 0, OV_HELD, 2)
+            _text(frame, 'held', (int(box[:, 0].max()) + 4, int(box[:, 1].min()) + 12), OV_HELD, 0.45)
+            s = f'held cube  x {held["x"]:.1f}  edge {held["edge"]:.1f} px'
+            if held.get('shift') is not None:
+                s += f'  edge ref moved {held["shift"]:+.1f} px'
+            _text(frame, s, (10, 72), OV_HELD, 0.5)
     legend = 'grey: filtered out  yellow: candidate  red: target  magenta: reference'
     if place:
         legend += '  cyan: top edge'
+    if held is not None:
+        legend += '  orange: held cube'
     _text(frame, legend, (10, h - 10), scale=0.4)
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser("Best Contour")
-    parser.add_argument('-r','--use_real',action='store_true',help='use sim or real robot')
+    parser.add_argument('-r','--use_real',action='store_true',help='ignored: the real robot and the MuJoCo simulation run the same code')
     parser.add_argument('-ng','--negative',action='store_true',help='negative place')
     parser.add_argument('-ns','--not_show',action='store_true',help='show img or not')
     parser.add_argument('-t','--test',type=str, help='test mode: pi0 pi1 pl0 pl1',default='no')
-    parser.add_argument('-cfg','--config_path',type=str, help='config file path',default='./configs/vision/sim.yaml')
-    parser.add_argument('-dfv','--default_hsv',type=str, help='use default hsv config: real or isaac',default='')
-    parser.add_argument('-dfr','--default_ref',type=str, help='use default ref config: real or isaac',default='')
+    parser.add_argument('-cfg','--config_path',type=str, default=None,
+                        help='config file path (default ./configs/vision/<env_type>.yaml; None: the built-in defaults)')
+    parser.add_argument('-dfv','--default_hsv',type=str, help='use the built-in hsv config: real',default='')
+    parser.add_argument('-dfr','--default_ref',type=str, help='use the built-in ref config: real',default='')
     parser.add_argument('-vd', '--video_device', type=str, help='video device', default="/camera/color/image_raw")
     parser.add_argument('-ci', '--camera_info', type=str, help='camera info topic', default="/camera/color/camera_info")
     parser.add_argument('-rt', '--rotate_180', action='store_true', help='rotate 180 degree')
+    parser.add_argument('--held-cube', action='store_true',
+                        help='Place 阶段同时识别手里的物块，按它沿两指空隙方向在夹爪里的偏差移动对准目标'
+                             '（需要配置里的 EXPECT_HELD_REF、HELD_SCALE）')
     parser.add_argument('--record', nargs='?', const='', default=None,
                         help='also save the Output window to a video (default runs/vision/vision_<time>.mp4)')
     args, unknown = parser.parse_known_args()
 
-    sim_player_nums = rospy.get_param("/airbot_play/sim_player_nums", default=0)
-    env_type = rospy.get_param("/env_type", default=None)
+    # 真机和MuJoCo仿真用同一套代码，差别只在配置文件（configs/vision/<env_type>.yaml，bringup设置/env_type）
+    env_type = rospy.get_param("/env_type", default="real")
     device:str = args.video_device
-    if sim_player_nums == 0:
-        args.use_real = True
-        # print(device)
-        # if not device.isdigit():
-        #     args.video_device = device = "2"
-        print("Use video device: ", device)
-    else:
-        print("Use topic: ", device)
+    print("Use video device: " if device.isdigit() else "Use topic: ", device)
+    if args.config_path is None:
+        args.config_path = f'./configs/vision/{env_type}.yaml'
 
     # 参数配置
     if args.config_path not in ['None','none', '']:
@@ -126,8 +172,6 @@ if __name__ == '__main__':
             config_path = current_dir + args.config_path
         else:
             config_path = args.config_path
-        if args.use_real and env_type is None:
-            config_path = config_path.replace('gazebo','real').replace('mujoco','real').replace('/sim.', '/real.')
         print(f'载入配置文件路径：{config_path}')
         # 载入配置文件（YAML，可以写注释；.json 文件按 JSON 读）
         if config_path.endswith('.json'):
@@ -151,15 +195,21 @@ if __name__ == '__main__':
         EXPECT_PICK_REF = configs['EXPECT_PICK_REF']  # 中心坐标
         EXPECT_PLACE_REF = configs['EXPECT_PLACE_REF']  # 上边沿
         EXPECT_X = configs['EXPECT_X']
+        # 手里的物块（--held-cube）：物块在夹爪正中时的图像上边沿 y，以及塔顶物块和手里物块在图像 y 上的像素比例
+        EXPECT_HELD_REF = configs.get('EXPECT_HELD_REF')
+        HELD_SCALE = configs.get('HELD_SCALE')
         # 面积限制
         AREA_LIMIT_PICK = configs['AREA_LIMIT_PICK']
         AREA_LIMIT_PLACE = configs['AREA_LIMIT_PLACE']
     else:
         print('未指定配置文件，使用默认参数')
-        converter = {True: 'Real', False: 'Sim'}
-        args.default_hsv = converter[args.use_real]
-        args.default_ref = converter[args.use_real]
+        args.default_hsv = args.default_hsv or 'real'
+        args.default_ref = args.default_ref or 'real'
         PLACE_CROP_X = None
+        EXPECT_HELD_REF = HELD_SCALE = None
+    if args.held_cube and None in (EXPECT_HELD_REF, HELD_SCALE):
+        exit('--held-cube 需要配置文件里的 EXPECT_HELD_REF、HELD_SCALE：'
+             '仿真用 pixi run sim-calib-vision --apply 算出；真机见 configs/vision/real.yaml 里的说明')
 
     # 打印一些信息
     def loginfo(msg: str):
@@ -207,6 +257,8 @@ if __name__ == '__main__':
                 video_out['writer'].release()
     atexit.register(close_record)
 
+    held_log = {'t': 0.0}  # --held-cube：每秒最多打印一次手里物块的识别结果
+
     # 核心图像处理函数
     def image_process(frame:Union[Image, ndarray]):
             # 根据注意力参数进行一些信息是否发送的切换
@@ -233,16 +285,14 @@ if __name__ == '__main__':
 
             # 颜色阈值确定
             if 'p' not in vision_attention:
-                if args.use_real:  # 目前仅针对实机课程有意义
-                    if args.test != 'no':
-                        StdVideo.color_thresh_determine(device,mode='HSV',show_raw=True)  # 阻塞，按esc退出
-                        exit('ESC键按下，视觉程序退出')
-                    else:
-                        print("当前的HSV阈值为:")  # 提示当前阈值
-                        print(f"  1L={HSV_Threshold['PurpleL']},1H={HSV_Threshold['PurpleH']}")
-                        print(f"  2L={HSV_Threshold['GreenL']}, 2H={HSV_Threshold['GreenH']}")
-                        StdVideo.color_thresh_determine(device,mode=vision_attention,show_raw=False)  # 阻塞，按esc退出
-                else: StdVideo.color_thresh_determine("camera/color/image_raw",mode=vision_attention)
+                if args.test != 'no':
+                    StdVideo.color_thresh_determine(device,mode='HSV',show_raw=True)  # 阻塞，按esc退出
+                    exit('ESC键按下，视觉程序退出')
+                else:
+                    print("当前的HSV阈值为:")  # 提示当前阈值
+                    print(f"  1L={HSV_Threshold['PurpleL']},1H={HSV_Threshold['PurpleH']}")
+                    print(f"  2L={HSV_Threshold['GreenL']}, 2H={HSV_Threshold['GreenH']}")
+                    StdVideo.color_thresh_determine(device,mode=vision_attention,show_raw=False)  # 阻塞，按esc退出
                 rospy.set_param("/vision_attention",'pick0')  # 回到0状态
                 vision_attention = 'pick0'
 
@@ -258,12 +308,13 @@ if __name__ == '__main__':
                     else: res,binary_img = StdVideo.color_filter(frame,HSV_Threshold['GreenL'],HSV_Threshold['GreenH'])
             # 检测得到边缘图
             if EdgeDetect:
-                converter = {True: 'Real', False: 'Sim'}
                 if ColorFilter:
-                    binary_img = StdVideo.edge_detect(binary_img,*CannyParam[converter[args.use_real]],convert=None)
-                else: binary_img = StdVideo.edge_detect(frame,*CannyParam[converter[args.use_real]])
+                    binary_img = StdVideo.edge_detect(binary_img,*CannyParam,convert=None)
+                else: binary_img = StdVideo.edge_detect(frame,*CannyParam)
             # 对二值图进行轮廓检测与筛选
-            ov_keep = ov_edge = None  # Output 窗口叠加用：Place 阶段参与识别的区域、塔顶上边沿
+            ov_keep = ov_edge = None  # Output 窗口叠加用：Place 阶段参与识别的区域、塔顶物块图像上边沿
+            ov_held = None  # Output 窗口叠加用：手里的物块
+            ref_place_y = expect_place_y  # 图像上边沿的对准目标；--held-cube 时按手里物块的偏差移动
             if 'pick' in vision_attention:  # pick模式
                 ov_area, ov_ratio = AREA_LIMIT_PICK, 3.0
                 converter = {
@@ -279,11 +330,10 @@ if __name__ == '__main__':
                 if args.test != 'no': StdVideo.Show('Binary',binary_img,wait_time=1)
             else:  # place模式
                 # place模式下mid_y没啥意义,然后‘长宽比’要大些
-                if args.use_real:
-                    # 裁切图像，避免由于物块大小不均匀造成的下层物块在上层轮廓侧边的漏出误识别（也可以通过轮廓近似的方式来消除这种凸性缺陷）
-                    bi = StdVideo.create_empty_frame(ImageSize[:2], 0)
-                    bi[:423,:] = binary_img[:423,:]
-                    binary_img = bi
+                # 裁切图像，避免由于物块大小不均匀造成的下层物块在上层轮廓侧边的漏出误识别（也可以通过轮廓近似的方式来消除这种凸性缺陷）
+                bi = StdVideo.create_empty_frame(ImageSize[:2], 0)
+                bi[:423,:] = binary_img[:423,:]
+                binary_img = bi
                 if PLACE_CROP_X is not None:  # 左右裁掉，避免识别到旁边抓取区的物块
                     x0, x1 = int(PLACE_CROP_X[0]), int(PLACE_CROP_X[1])
                     binary_img[:, :max(0, x0)] = 0
@@ -291,7 +341,7 @@ if __name__ == '__main__':
                 ov_h, ov_w = binary_img.shape[:2]
                 ov_keep = (max(0, int(PLACE_CROP_X[0])) if PLACE_CROP_X is not None else 0,
                            int(PLACE_CROP_X[1]) if PLACE_CROP_X is not None else ov_w,
-                           423 if args.use_real else ov_h)
+                           423)
                 ov_area, ov_ratio = AREA_LIMIT_PLACE, 5.5
                 # 轮廓识别
                 converter = {
@@ -304,13 +354,35 @@ if __name__ == '__main__':
                                                                                            5.5,
                                                                                            (expect_x, expect_pick_y))
                 if args.test != 'no': StdVideo.Show('Binary',binary_img,wait_time=1)
+                # 手里的物块（另一种颜色）：--held-cube 时用来修正对准目标；测试模式下也识别，用来标定 EXPECT_HELD_REF
+                if args.held_cube or args.test != 'no':
+                    hc = 'Green' if vision_attention == 'place1' else 'Purple'
+                    _, held_bin = StdVideo.color_filter(frame, HSV_Threshold[hc + 'L_P'], HSV_Threshold[hc + 'H_P'])
+                    if PLACE_CROP_X is not None:
+                        held_bin[:, :max(0, x0)] = 0
+                        held_bin[:, x1:] = 0
+                    held = find_held_cube(held_bin, AREA_LIMIT_PLACE[0])
+                    ov_held = dict(held or {}, shift=None)
+                    if held is None:
+                        if args.held_cube:
+                            cnt = None  # 看不到手里的物块就不发偏差，机械臂停在原地
+                    else:
+                        if args.test != 'no':
+                            loginfo(f'手里物块：中心 x {held["x"]:.1f}，图像上边沿 {held["edge"]:.1f}')
+                        if args.held_cube:
+                            ov_held['shift'] = held_shift(held, EXPECT_HELD_REF, HELD_SCALE)
+                            ref_place_y += ov_held['shift']
                 if cnt is not None:
                     # 上边沿法（前提是物块上边是近乎平行的，否则不对）（注意摄像头下移则上边沿相对上移）
-                    if not args.use_real:
-                        reference_y = expect_place_y  # 参考的标准的上边沿的位置（参考值的偏差直接影响了所有物块放置的偏差（即每次放置的系统偏差），是累计偏差的根源，因此一定要尽可能精确确定，并且在放置时可以采用上下轮换逼近的方式避免累计）
-                    else: reference_y = expect_place_y
+                    reference_y = ref_place_y  # 参考的标准的上边沿的位置（参考值的偏差直接影响了所有物块放置的偏差（即每次放置的系统偏差），是累计偏差的根源，因此一定要尽可能精确确定，并且在放置时可以采用上下轮换逼近的方式避免累计）
                     upper_edge = center_xy[1] - w_h[0]/2  # 注意此时减的是宽，因为宽更小，符合实际情况
                     ov_edge = upper_edge
+                    if args.held_cube and time.time() - held_log['t'] > 1.0:
+                        held_log['t'] = time.time()
+                        loginfo(f'手里物块：中心 x {ov_held["x"]:.1f}，图像上边沿 {ov_held["edge"]:.1f}；'
+                                f'图像上边沿的对准目标移动 {ov_held["shift"]:+.1f} px；'
+                                f'塔顶物块：中心 x {center_xy[0]:.1f}，图像上边沿 {upper_edge:.1f}，'
+                                f'图像下边沿 {center_xy[1] + w_h[0]/2:.1f}')
                     if args.negative:
                         bias_xyz[0] *= -1  # x方向偏差照旧，只是另一头方向要反一下
                         bias_xyz[1] = upper_edge - reference_y # 将y方向的偏差改为物块上边沿的位置(物块在)
@@ -336,7 +408,7 @@ if __name__ == '__main__':
             # 图像展示：叠加识别过程（候选、目标、参考点、裁剪区域），见 draw_overlay
             target = None if cnt is None else {'box': box_int, 'offset': (bias_xyz[0], bias_xyz[1], rotation_angle), 'edge': ov_edge}
             draw_overlay(frame, vision_attention, binary_img, ov_area, ov_ratio, (expect_x, expect_pick_y),
-                         target, ov_keep, expect_place_y)
+                         target, ov_keep, ref_place_y, ov_held)
             record(frame)
             StdVideo.Show('Output',frame,wait_time=1,disable=args.not_show,show_fps=False)
             return frame
@@ -344,9 +416,6 @@ if __name__ == '__main__':
     """ ***********程序内置参考用识别参数配置************ """
     # 颜色阈值
     HSV_Color = {
-        # 仿真
-        'PurpleLS':[64,93,59],   'PurpleHS':[179,255,255],
-        'GreenLS':[40,111,113],  'GreenHS':[107,255,255],
         # 实机
         # 'PurpleLR':[90,180,70], 'PurpleHR':[178,255,255], # 2.10+2.25晚均可
         'PurpleLR':[70,70,24], 'PurpleHR':[152,255,255],  # 2.26下午16点
@@ -376,9 +445,6 @@ if __name__ == '__main__':
         if default_ref == 'real':
             expect_pick_y = 529
             expect_place_y = 456
-        elif default_ref == 'isaac':
-            expect_pick_y = 529
-            expect_place_y = 456
 
     HSV_Threshold = {}
     # HSV参数配置
@@ -398,16 +464,11 @@ if __name__ == '__main__':
             HSV_Threshold['PurpleH'] = HSV_Color['PurpleHR']
             HSV_Threshold['GreenL']  = HSV_Color['GreenLR']
             HSV_Threshold['GreenH']  = HSV_Color['GreenHR']
-        elif default_hsv == 'isaac':
-            HSV_Threshold['PurpleL'] = HSV_Color['PurpleLS']
-            HSV_Threshold['PurpleH'] = HSV_Color['PurpleHS']
-            HSV_Threshold['GreenL']  = HSV_Color['GreenLS']
-            HSV_Threshold['GreenH']  = HSV_Color['GreenHS']
     for _k in ('PurpleL', 'PurpleH', 'GreenL', 'GreenH'):
         HSV_Threshold.setdefault(_k + '_P', HSV_Threshold.get(_k))
 
     # 算法相关
-    CannyParam = {'Sim':[210,240,5,True],'Real':[0,0,0,False]}
+    CannyParam = [0,0,0,False]
     ColorFilter = True
     EdgeDetect = False
 
