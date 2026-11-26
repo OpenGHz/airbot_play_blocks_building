@@ -92,7 +92,7 @@ pixi run vision -vd 2                 # 终端 3
 
 **用规划场景**（`pixi run pick-place go P1 P2 scene`，可选）：默认和原来的程序一样，抓取区和塔之间按固定路点移动（先升高、再水平移、松开后上升并朝抓取区一侧侧移 7.5 cm），不做碰撞检查，安全靠这些按真机布局定的余量，段之间会停一下。加 `scene` 后在 MoveIt 规划场景里放入地面和塔，抓取区和塔之间的移动绕开它们规划、一条轨迹走完，安全依赖模型（手指、塔的碰撞体）和实际的接近程度。不加 `scene` 时程序启动会去掉上次加 `scene` 运行时留在 MoveIt 里的地面和塔。详见 [docs/pick_place_flow.md](docs/pick_place_flow.md) §2、§4。
 
-**看手里的物块**（`pixi run vision -vd 2 --held-cube`，可选）：默认的闭环放置让夹爪对准塔顶物块，物块在夹爪里的偏差原样带到塔上（[分析](docs/place_closed_loop_analysis.md)）。加 `--held-cube` 后，Place 阶段同时识别手里的物块（另一种颜色，图像最下面），按它沿两指空隙方向偏离夹爪中心多少移动对准目标，让手里的物块对准塔顶物块；手指开合方向不修正。需要视觉配置里的 `EXPECT_HELD_REF`、`HELD_SCALE`：仿真里由 `pixi run sim-calib-vision --apply` 算出，真机上还没有标定（方法见 `configs/vision/real.yaml` 里的注释）。看不到手里的物块时不发偏差，机械臂停在原地。
+**看手里的物块**（`pixi run vision -vd 2 --held-cube`，可选）：默认的闭环放置让夹爪对准塔顶物块，物块在夹爪里的偏差原样带到塔上（各种放置修正的作用见[放置闭环修正](docs/place_closed_loop_analysis.md)）。加 `--held-cube` 后，Place 阶段同时识别手里的物块（另一种颜色，图像最下面），按它沿两指空隙方向偏离夹爪中心多少移动对准目标，让手里的物块对准塔顶物块；手指开合方向不修正。需要视觉配置里的 `EXPECT_HELD_REF`、`HELD_SCALE`：仿真里由 `pixi run sim-calib-vision --apply` 算出，真机上还没有标定（方法见 `configs/vision/real.yaml` 里的注释）。看不到手里的物块时不发偏差，机械臂停在原地。
 
 `pixi run <任务>` 后面的参数会原样传给对应的命令。《实验手册》原命令与新命令的逐条对照见 [docs/commands.md](docs/commands.md)。
 
