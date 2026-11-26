@@ -87,7 +87,7 @@ def pose_scene(cfg, res, name, tower_blocks):
     model, data = build_with_props(cfg, res["table_height"], tower_blocks, held is not None)
     scene.set_arm(model, data, q, finger)
     if held is not None:
-        data.mocap_pos[0] = np.asarray(held) + scene.base_offset(cfg, res["table_height"])
+        data.mocap_pos[0] = scene.base_frame(cfg, res["table_height"]).to_world(held)
         mujoco.mj_forward(model, data)
     return model, data
 

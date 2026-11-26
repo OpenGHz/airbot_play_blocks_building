@@ -37,14 +37,14 @@ class Cam:
     def __init__(self, cfg):
         self.cfg = cfg
         self.m, self.d, _ = scene.build_physics(cfg)
-        self.arm = kin.Arm(self.m, mujoco.MjData(self.m), scene.base_offset(cfg))
+        self.frame = scene.base_frame(cfg)
+        self.arm = kin.Arm(self.m, mujoco.MjData(self.m), self.frame)
         c = cfg["CAMERA"]
         self.r = mujoco.Renderer(self.m, int(c["HEIGHT"]), int(c["WIDTH"]))
         self.cubes = [
             self.m.joint(self.m.body(f"cube_{i}").jntadr[0]).qposadr[0] for i in range(int(cfg.get("CUBE_POOL", 40)))
         ]
         self.colors = scene.pool_colors(cfg)
-        self.base = scene.base_offset(cfg)
         self.s = cfg["CUBE_SIZE"] / 2
 
     def cube(self, color, k):
@@ -52,9 +52,10 @@ class Cam:
         return [i for i, c in enumerate(self.colors) if c == color][k]
 
     def put(self, i, xyz_base, yaw=0.0):
+        """Cube i at xyz_base (base frame), turned yaw (rad) from the base frame's x axis."""
         a = self.cubes[i]
-        self.d.qpos[a : a + 3] = np.asarray(xyz_base) + self.base
-        self.d.qpos[a + 3 : a + 7] = [math.cos(yaw / 2), 0, 0, math.sin(yaw / 2)]
+        self.d.qpos[a : a + 3] = self.frame.to_world(xyz_base)
+        self.d.qpos[a + 3 : a + 7] = scene.yaw_quat(yaw + self.frame.yaw)
 
     def pose(self, xyz_base, finger_q, yaw=0.0):
         c, s = math.cos(yaw), math.sin(yaw)

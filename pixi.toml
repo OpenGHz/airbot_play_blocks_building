@@ -48,6 +48,9 @@ pyserial = "*"
 py-opencv = "*"
 # --- simulation ---
 mujoco = ">=3.16.0,<4"
+# The panel next to the MuJoCo window (sim/panel.py); RViz brings PyQt5 in as well.
+# conda-forge's tk is built without Xft, so Chinese text would not render in a Tk window.
+pyqt = "5.*"
 # --- tests (pixi run test) and code style (pixi run lint / fmt) ---
 pytest = ">=9.2.0,<10"
 ruff = ">=0.17.6,<0.18"
@@ -90,8 +93,9 @@ lint = { cmd = "ruff format --check . && ruff check .", description = "Check the
 fmt = { cmd = "ruff format . && ruff check --fix . && ruff format .", description = "Format the Python code and apply the safe lint fixes" }
 
 # MuJoCo simulation. Terminal 0 in the simulation: `pixi run sim` instead of airbot_server.
-sim = { cmd = "python -m sim.world", description = "Run the simulated arm, gripper and cubes (MuJoCo window; --headless, --no-camera, --seed N)" }
-sim-ctl = { cmd = "python -m sim.ctl", description = "The operator's hands in the simulation: sim-ctl cube to-gripper|put-under|nudge|take|respawn|reset|list" }
+sim = { cmd = "python -m sim.world", description = "Run the simulated arm, gripper and cubes (MuJoCo window and the panel; --headless, --no-camera, --no-panel, --seed N)" }
+sim-panel = { cmd = "python -m sim.panel", description = "Open the panel again: where the arm stands on the table and where the cubes are, with sliders and numbers" }
+sim-ctl = { cmd = "python -m sim.ctl", description = "The operator's hands in the simulation: sim-ctl cube to-gripper|put-under|nudge|set|take|respawn|reset|list, sim-ctl arm where|mount|save" }
 sim-slip-test = { cmd = "python -m sim.slip_test", description = "Check that a grasped cube does not slip out of the gripper" }
 sim-record = { cmd = "python -m sim.record", description = "Record the running simulation (whole arm + wrist camera inset) to runs/sim/record_*.mp4 until Ctrl+C (--snapshot PNG to choose the view)" }
 sim-calib-vision = { cmd = "python -m sim.calib_vision", description = "Compute EXPECT_X / EXPECT_PICK_REF / EXPECT_PLACE_REF for configs/vision/sim.yaml (--apply)" }

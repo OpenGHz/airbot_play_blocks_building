@@ -58,8 +58,8 @@ def main() -> int:
     c = cfg["CAMERA"]
     eye = None if args.no_inset else mujoco.Renderer(model, int(c["HEIGHT"]), int(c["WIDTH"]))
 
-    base = scene.base_offset(cfg)
-    tower_xy = base[:2] + [control["PLACE_POSITION_X"], control["PLACE_POSITION_Y"]]
+    place_xy = np.array([control["PLACE_POSITION_X"], control["PLACE_POSITION_Y"]])  # base frame
+    tower_xy = scene.base_frame(cfg).to_world(place_xy)  # world; follows the arm's mount (frame below)
     cubes = [model.body(f"cube_{i}").id for i in range(int(cfg.get("CUBE_POOL", 40)))]
     fingers = [model.body(n).id for n in scene.FINGER_BODIES]
     finger_q = model.joint("endleft").qposadr[0]
@@ -86,7 +86,14 @@ def main() -> int:
         return 1
 
     def frame(t: float) -> np.ndarray:
-        data.qpos[:] = sim.request("get_qpos", timeout=1.0)["qpos"]
+        nonlocal tower_xy
+        state = sim.request("get_qpos", timeout=1.0)
+        data.qpos[:] = state["qpos"]
+        if "mount" in state:  # the arm where the simulation has it (it can be moved and turned)
+            yaw = state.get("mount_yaw", 0.0)
+            scene.place_base(model, state["mount"], yaw)
+            pos = [*state["mount"], scene.base_offset(cfg)[2]]
+            tower_xy = scene.BaseFrame(pos, yaw).to_world(place_xy)
         mujoco.mj_kinematics(model, data)
         mujoco.mj_camlight(model, data)
         view.update_scene(data, camera=cam)

@@ -22,7 +22,7 @@ class Rig:
     def __init__(self, cfg, control):
         self.w = World(cfg)
         self.m, self.d = self.w.model, self.w.data
-        self.arm = kin.Arm(self.m, mujoco.MjData(self.m), self.w.base)
+        self.arm = kin.Arm(self.m, mujoco.MjData(self.m), self.w.frame)
         self.eef = self.m.body(scene.EEF_BODY).id
         self.control = control
         self.max_slip = 0.0
@@ -116,7 +116,7 @@ def main():
     ap.add_argument("--trials", type=int, default=5, help="different random pick-area layouts")
     ap.add_argument("--fast", type=float, default=1.0, help="time scale of the moves (0.5 = twice as fast)")
     args = ap.parse_args()
-    cfg = scene.load_config(args.scene)
+    cfg = scene.without_mount_offset(scene.load_config(args.scene))  # grasps at world x, y (= base frame)
     if args.noslip is not None:
         cfg["NOSLIP_ITERATIONS"] = args.noslip
     control = config_file.load(args.control)

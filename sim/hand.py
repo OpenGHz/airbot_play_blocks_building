@@ -8,12 +8,14 @@ applies it the way a hand would:
   cube      carried along with the mouse, upright, held still (it pushes what it bumps into);
             let go, it is set down upright on whatever is under it (floor, table, another
             cube), so stacking a cube on the tower by hand works too.
-  arm base  (base_link or link1) slides the whole arm across the table top: World.set_mount,
-            which keeps it on the table and refuses moves that put the arm into the table.
-            Like on the real robot only the arm moves: the table, the floor marks and the
-            cubes stay, so positions recorded in configs/control/sim.yaml no longer match.
-            The overlay says so while the arm is off the scene file's mount; nothing is
-            printed in the terminal (`pixi run sim-ctl arm where` prints the mount).
+  arm base  (base_link or link1) slides (Ctrl + right drag) or turns (Ctrl + left drag) the
+            whole arm on the table top: World.set_mount, which keeps the base plate on the
+            table and refuses moves that put the arm into the table. Like on the real robot
+            only the arm moves: the table, the floor marks and the cubes stay, so positions
+            recorded in configs/control/sim.yaml no longer match. The overlay says so while
+            the arm is off the scene file's mount; nothing is printed in the terminal
+            (`pixi run sim-ctl arm where` prints the mount). Exact values for the arm and the
+            cubes: the panel (sim/panel.py), or `sim-ctl arm mount` / `sim-ctl cube set`.
 
 The viewer's overlay font has no Chinese characters, so the overlay text is in English.
 """
@@ -69,14 +71,14 @@ class Hand:
             if active & ROTATE:
                 yaw = d["yaw0"] + heading(refquat) - d["heading0"]
             self.held = [i, centre, yaw]
-        elif active & TRANSLATE:  # the arm base: slide on the table top
-            target = d["mount0"] + delta[:2]
-            _, why = self.w.set_mount(target)
+        else:  # the arm base: slide or turn on the table top
+            if active & TRANSLATE:
+                _, why = self.w.set_mount(d["mount0"] + delta[:2])
+            else:
+                _, why = self.w.set_mount(d["mount0"], d["yaw0"] + heading(refquat) - d["heading0"])
             self.note = {"": "", "edge": "at the table edge"}.get(
                 why, f"blocked: the {why.split(':', 1)[-1]} would hit the table"
             )
-        else:
-            self.note = "the arm base only slides, it does not turn"
 
     def before_step(self) -> None:
         """Hold a carried cube where the hand is (World.lock held)."""
@@ -89,16 +91,16 @@ class Hand:
         """Overlay for Handle.set_texts."""
         grid = mujoco.mjtGridPos
         font = mujoco.mjtFontScale.mjFONTSCALE_100
-        dx, dy = self.w.mount
         help_left = "Select\nMove\nTurn\nLet go\nArm base"
         help_right = (
             "double-click a cube, or the arm base\n"
             "Ctrl + right drag   (with Shift: along the floor / table top)\n"
-            "Ctrl + left drag   (cubes)\n"
+            "Ctrl + left drag\n"
             "the cube is set down on what is under it\n"
-            f"{dx:+.3f}, {dy:+.3f} m from the scene file's mount   (sim-ctl arm save keeps it)"
+            f"{self._mount_text()} from the scene file's mount   (sim panel: exact values, save)"
         )
-        if not np.allclose(self.w.mount, 0.0):  # as on the real robot: the recorded positions no longer match
+        moved = abs(self.w.mount_yaw) > 1e-9 or not np.allclose(self.w.mount, 0.0)
+        if moved:  # as on the real robot: the recorded positions no longer match
             help_left += "\n"
             help_right += (
                 "\nmoved: re-record the positions in configs/control/sim.yaml (manual section 7), or move it back"
@@ -121,7 +123,7 @@ class Hand:
             d.update(kind="cube", cube=i, centre0=centre, yaw0=yaw, heading0=heading(refquat))
             self.held = [i, centre.copy(), yaw]
         else:
-            d.update(kind="base", mount0=self.w.mount.copy())
+            d.update(kind="base", mount0=self.w.mount.copy(), yaw0=self.w.mount_yaw, heading0=heading(refquat))
             self.note = ""
         return d
 
@@ -136,11 +138,14 @@ class Hand:
         sel = self.select
         if sel in self.cube_of_body:
             i = self.cube_of_body[sel]
-            x, y, z = self.w.cube_pos(i) - self.w.base
+            x, y, z = self.w.to_base(self.w.cube_pos(i))
             return f"cube_{i} ({self.w.cubes[i]['color']})   arm base frame  x {x:+.3f}  y {y:+.3f}  z {z:+.3f} m"
         if sel in self.base_bodies:
-            dx, dy = self.w.mount
-            return f"arm base   {dx:+.3f}, {dy:+.3f} m from the scene file's mount" + (
+            return f"arm base   {self._mount_text()} from the scene file's mount" + (
                 f"   ({self.note})" if self.note else ""
             )
         return ""
+
+    def _mount_text(self) -> str:
+        dx, dy = self.w.mount
+        return f"{dx:+.4f}, {dy:+.4f} m, {math.degrees(self.w.mount_yaw):+.1f} deg"

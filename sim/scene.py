@@ -17,10 +17,11 @@ on the table top: the mount keeps the whole plate on the table (`base_plate`, `t
 Frames. World: the floor is z = 0. Scene frame: the world shifted up by the table
 height; every position in configs/scene/*.yaml (table, tower spot, pick area) is in it.
 Robot base frame: where the arm stands on the table, the scene frame shifted by
-MOUNT_OFFSET [dx, dy] (default 0, the scene file's mount); positions in
-configs/control/*.yaml are in it, like the real robot's keyboard readouts. Moving the
-arm on the table (MOUNT_OFFSET, or dragging its base in the `pixi run sim` window)
-moves only the arm: the table, the floor marks and the cubes stay where they are.
+MOUNT_OFFSET [dx, dy] (m) and turned MOUNT_YAW (deg, about the vertical through the base
+centre; both default 0, the scene file's mount); positions in configs/control/*.yaml are
+in it, like the real robot's keyboard readouts (`BaseFrame` converts). Moving the arm on
+the table (MOUNT_OFFSET / MOUNT_YAW, the mouse or the panel in the `pixi run sim` window,
+or sim-ctl) moves only the arm: the table, the floor marks and the cubes stay where they are.
 """
 
 from __future__ import annotations
@@ -295,7 +296,8 @@ def build_spec(cfg: dict | None = None, table_height: float | None = None, physi
     spec = mujoco.MjSpec.from_string(_env_xml(cfg, h, physics))
     robot = robot_spec(cfg)
     dx, dy = mount_offset(cfg)
-    spec.body("lift").add_frame(pos=[dx, dy, 0.0]).attach_body(robot.body("base_link"), "", "")
+    frame = spec.body("lift").add_frame(pos=[dx, dy, 0.0], quat=yaw_quat(mount_yaw(cfg)))
+    frame.attach_body(robot.body("base_link"), "", "")
 
     # Self-collision is MoveIt's job; contacts between arm links (convex hulls of
     # the meshes overlap in the folded Home pose) would only add jitter.
@@ -421,10 +423,55 @@ def mount_offset(cfg: dict) -> np.ndarray:
     return np.array([float(dx), float(dy)])
 
 
+def mount_yaw(cfg: dict) -> float:
+    """How far the arm is turned on the table from the scene file's mount (rad): MOUNT_YAW (deg)."""
+    return math.radians(float(cfg.get("MOUNT_YAW", 0.0)))
+
+
+def yaw_quat(yaw: float) -> np.ndarray:
+    """(w, x, y, z) quaternion of a turn by yaw (rad) about z."""
+    return np.array([math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)])
+
+
+class BaseFrame:
+    """The robot base frame in the world: origin at `pos` (world), turned `yaw` (rad) about the vertical.
+
+    Points are arrays whose last axis is (x, y, z), or (x, y) for horizontal positions."""
+
+    def __init__(self, pos, yaw: float = 0.0):
+        self.pos = np.asarray(pos, dtype=float)
+        self.yaw = float(yaw)
+        c, s = math.cos(self.yaw), math.sin(self.yaw)
+        self.rot = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])  # base axes in the world
+
+    def to_base(self, p) -> np.ndarray:
+        p = np.asarray(p, dtype=float)
+        n = p.shape[-1]
+        return (p - self.pos[:n]) @ self.rot[:n, :n]
+
+    def to_world(self, p) -> np.ndarray:
+        p = np.asarray(p, dtype=float)
+        n = p.shape[-1]
+        return p @ self.rot[:n, :n].T + self.pos[:n]
+
+
 def base_offset(cfg: dict, table_height: float | None = None) -> np.ndarray:
-    """World position of the robot base frame (base-frame point + this = world point)."""
+    """World position of the robot base frame's origin (`base_frame` adds MOUNT_YAW)."""
     dx, dy = mount_offset(cfg)
     return np.array([dx, dy, cfg["TABLE_HEIGHT"] if table_height is None else table_height])
+
+
+def base_frame(cfg: dict, table_height: float | None = None) -> BaseFrame:
+    """The robot base frame at the mount in cfg (MOUNT_OFFSET, MOUNT_YAW)."""
+    return BaseFrame(base_offset(cfg, table_height), mount_yaw(cfg))
+
+
+def place_base(model: mujoco.MjModel, mount_xy, yaw: float) -> None:
+    """Put the arm (body base_link) at mount_xy, turned yaw (rad), in a model built by this module.
+    Call mj_forward / mj_kinematics afterwards."""
+    root = model.body("base_link").id
+    model.body_pos[root][:2] = mount_xy
+    model.body_quat[root] = yaw_quat(yaw)
 
 
 def scene_offset(cfg: dict, table_height: float | None = None) -> np.ndarray:
@@ -432,19 +479,26 @@ def scene_offset(cfg: dict, table_height: float | None = None) -> np.ndarray:
     return np.array([0.0, 0.0, cfg["TABLE_HEIGHT"] if table_height is None else table_height])
 
 
-def mount_limits(cfg: dict) -> tuple[float, float, float, float]:
-    """(x0, x1, y0, y1) in the scene frame the arm base centre may be moved within: the whole base
-    plate stays on the table top."""
+def mount_limits(cfg: dict, yaw: float = 0.0) -> tuple[float, float, float, float]:
+    """(x0, x1, y0, y1) in the scene frame the arm base centre may be moved within with the arm
+    turned yaw (rad) from the scene file's mount: the whole base plate stays on the table top."""
     (x0, x1, y0, y1), _ = table_rect(cfg)
     px0, px1, py0, py1 = base_plate()
-    return x0 - px0, x1 - px1, y0 - py0, y1 - py1
+    corners = BaseFrame([0.0, 0.0], yaw).to_world(np.array([(px0, py0), (px0, py1), (px1, py0), (px1, py1)]))
+    (ax0, ay0), (ax1, ay1) = corners.min(0), corners.max(0)
+    return x0 - ax0, x1 - ax1, y0 - ay0, y1 - ay1
+
+
+MOUNT_KEYS = ("MOUNT_OFFSET", "MOUNT_YAW")
 
 
 def without_mount_offset(cfg: dict) -> dict:
-    """The layout tools (sim-reach, sim-snapshot, sim-view) work with the scene file's mount."""
-    if np.any(mount_offset(cfg)):
-        print(f"[sim] 忽略场景文件里的 MOUNT_OFFSET {cfg['MOUNT_OFFSET']}：布局分析按场景文件里原来的安装位置计算")
-    return {k: v for k, v in cfg.items() if k != "MOUNT_OFFSET"}
+    """The layout tools (sim-reach, sim-snapshot, sim-view, sim-slip-test) work with the scene file's mount."""
+    moved = {k: cfg[k] for k in MOUNT_KEYS if k in cfg and np.any(cfg[k])}
+    if moved:
+        keys = "、".join(f"{k} {v}" for k, v in moved.items())
+        print(f"[sim] 忽略场景文件里的 {keys}：按场景文件里原来的安装位置计算")
+    return {k: v for k, v in cfg.items() if k not in MOUNT_KEYS}
 
 
 def finger_q_for_gap(gap: float) -> float:

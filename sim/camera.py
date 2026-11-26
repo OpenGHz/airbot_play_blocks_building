@@ -62,7 +62,6 @@ def main() -> int:
     cam = cfg["CAMERA"]
     width, height, fps = int(cam["WIDTH"]), int(cam["HEIGHT"]), float(cam.get("FPS", 30))
     model, data, _ = scene.build_physics(cfg)
-    root = model.body("base_link").id  # the arm's mount; follows the simulation's (it can be dragged)
     renderer = mujoco.Renderer(model, height, width)
     cam_id = model.camera("eye").id
 
@@ -96,8 +95,8 @@ def main() -> int:
         except DriverError:
             break
         data.qpos[:] = state["qpos"]
-        if "mount" in state:
-            model.body_pos[root][:2] = state["mount"]
+        if "mount" in state:  # the arm's mount follows the simulation's (it can be moved and turned)
+            scene.place_base(model, state["mount"], state.get("mount_yaw", 0.0))
         mujoco.mj_kinematics(model, data)
         mujoco.mj_camlight(model, data)
         renderer.update_scene(data, camera=cam_id)

@@ -18,7 +18,7 @@ def compute(cfg: dict, control: dict, table_height: float | None = None, margin:
     """Poses at the given table height. Raises RuntimeError if the floor or the pick area is out of reach."""
     h_table = cfg["TABLE_HEIGHT"] if table_height is None else table_height
     model, data, _ = scene.build(cfg, h_table)
-    arm = kin.Arm(model, data, scene.base_offset(cfg, h_table), kin.limit_margin(cfg))
+    arm = kin.Arm(model, data, scene.base_frame(cfg, h_table), kin.limit_margin(cfg))
     h, gap = control["CUBE_HEIGHT"], control.get("GAP_PLACE", 0.003)
     hold = scene.finger_q_for_gap(cfg["CUBE_SIZE"])
     scan, grasp = scene.pick_targets(cfg, control, h_table)

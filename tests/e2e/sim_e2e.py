@@ -174,9 +174,9 @@ class Monitor(threading.Thread):
         self.sock, self.cfg, self.control = sock, cfg, control
         self.m, self.d, _ = scene.build_physics(cfg)
         m = self.m
-        self.base = scene.base_offset(cfg)
+        self.frame = scene.base_frame(cfg)
         self.tower_world = np.array(cfg["TOWER_XY"]) + scene.scene_offset(cfg)[:2]
-        self.tower_xy = self.tower_world - self.base[:2]  # base frame, like the end-effector samples
+        self.tower_xy = self.frame.to_base(self.tower_world)  # base frame, like the end-effector samples
         self.h = control["CUBE_HEIGHT"]
         self.cubes = {m.body(f"cube_{i}").id: i for i in range(int(cfg.get("CUBE_POOL", 40)))}
         self.cube_geom = {i: m.geom(f"cube_{i}").id for i in self.cubes.values()}
@@ -243,7 +243,7 @@ class Monitor(threading.Thread):
             q = np.array(qpos[:6])
             moving = last_q is not None and float(np.abs(q - last_q).max()) > 1e-4
             last_q = q
-            eef = self.d.xpos[self.eef] - self.base
+            eef = self.frame.to_base(self.d.xpos[self.eef])
             self.samples.append((t, eef.copy(), self.width(), moving))
             self.held.append(self.held_cube())
             self.qpos.append(np.asarray(qpos, dtype=np.float32))
@@ -294,8 +294,8 @@ class Monitor(threading.Thread):
         top = max(tower.values(), key=lambda b: d.xpos[b][2], default=None)
         in_zone = (
             top is not None
-            and np.linalg.norm(eef[:2] - (d.xpos[top][:2] - self.base[:2])) < 0.02
-            and eef[2] < d.xpos[top][2] - self.base[2] + self.h / 2 + self.h + 0.02
+            and np.linalg.norm(eef[:2] - self.frame.to_base(d.xpos[top])[:2]) < 0.02
+            and eef[2] < self.frame.to_base(d.xpos[top])[2] + self.h / 2 + self.h + 0.02
         )
         if not in_zone and touching:
             names = sorted(
@@ -364,7 +364,7 @@ class Monitor(threading.Thread):
         return {
             "offset_from_bottom_mm": [round(float(v), 1) for v in from_bottom],
             "max_step_mm": round(float(steps.max()), 1),
-            "xy_base": [[round(float(v), 5) for v in p - self.base[:2]] for p in xy],
+            "xy_base": [[round(float(v), 5) for v in self.frame.to_base(p)] for p in xy],
         }  # bottom to top, base frame (m)
 
     def stationary_for(self) -> float:

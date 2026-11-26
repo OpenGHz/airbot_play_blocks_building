@@ -22,8 +22,12 @@ def limit_margin(cfg: dict) -> float:
 
 
 class Arm:
-    def __init__(self, model: mujoco.MjModel, data: mujoco.MjData, base: np.ndarray, limit_margin: float = 0.0):
-        self.m, self.d, self.base = model, data, np.asarray(base, dtype=float)
+    def __init__(self, model: mujoco.MjModel, data: mujoco.MjData, base, limit_margin: float = 0.0):
+        """base: the robot base frame in the world (scene.BaseFrame), or its origin (not turned).
+        Positions and orientations in and out are in the base frame."""
+        self.m, self.d = model, data
+        self.frame = base if isinstance(base, scene.BaseFrame) else scene.BaseFrame(base)
+        self.base = self.frame.pos
         self.qadr = np.array([model.joint(j).qposadr[0] for j in scene.ARM_JOINTS])
         self.dadr = np.array([model.joint(j).dofadr[0] for j in scene.ARM_JOINTS])
         self.hard_lo, self.hard_hi = model.jnt_range[[model.joint(j).id for j in scene.ARM_JOINTS]].T
@@ -43,7 +47,7 @@ class Arm:
         self.d.qpos[self.qadr] = q
         mujoco.mj_kinematics(self.m, self.d)
         mujoco.mj_comPos(self.m, self.d)  # needed by mj_jacBody
-        return self.d.xpos[self.eef] - self.base, self.d.xmat[self.eef].reshape(3, 3)
+        return self.frame.to_base(self.d.xpos[self.eef]), self.frame.rot.T @ self.d.xmat[self.eef].reshape(3, 3)
 
     # --- inverse ---------------------------------------------------------
     def ik(self, pos, rot=DOWN, seed=None, restarts=30, iters=150):
@@ -60,7 +64,8 @@ class Arm:
                 if np.linalg.norm(ep) < 1e-4 and np.linalg.norm(er) < 1e-3:
                     return q
                 mujoco.mj_jacBody(self.m, self.d, jacp, jacr, self.eef)
-                jac = np.vstack([jacp[:, self.dadr], jacr[:, self.dadr]])
+                rt = self.frame.rot.T  # the Jacobian is in the world frame, the errors in the base frame
+                jac = np.vstack([rt @ jacp[:, self.dadr], rt @ jacr[:, self.dadr]])
                 err = np.concatenate([ep, er])
                 dq = jac.T @ np.linalg.solve(jac @ jac.T + 1e-4 * np.eye(6), err)
                 q = np.clip(q + dq, self.lo, self.hi)
@@ -73,7 +78,7 @@ class Arm:
         mujoco.mj_kinematics(self.m, self.d)
         mujoco.mj_camlight(self.m, self.d)
         c = self.m.camera("eye").id
-        return self.d.cam_xpos[c] - self.base, self.d.cam_xmat[c].reshape(3, 3)
+        return self.frame.to_base(self.d.cam_xpos[c]), self.frame.rot.T @ self.d.cam_xmat[c].reshape(3, 3)
 
     # --- clearance -------------------------------------------------------
     def clearance(self, q, finger_q=0.0, with_floor=False):
