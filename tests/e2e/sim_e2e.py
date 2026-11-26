@@ -26,7 +26,7 @@ Scenarios
   baseline  the program before the changes (git 7a1c2c2) in the same setup. Expected (plan
             §1.1): it freezes after block LIMIT_BLOCKS (6), with a "bad callback" in its log.
   kill-sim  floor scene; kill the simulation while the arm carries block 3. Expected: the
-            program says what happened and does not hang.
+            program says what happened and exits with status 2 (no hang, no crash).
   golden    zero vision offset, tabletop scene, real.yaml: record every motion target of the
             old and the new program and compare them (plan §8). Without the vision the gripper
             closes at the scan point and only pinches pick-area cubes by an edge, then drops
@@ -804,7 +804,9 @@ def main() -> int:
         ok = (
             bool(r.get("killed_sim"))
             and r.get("pick_place_ended_after_s") is not None
-            and r["pick_place_exit"] not in (0, None)
+            # exit status 2: the joint-state watchdog's own exit (it prints what happened). A crash
+            # (-11 when a MoveIt pose target found no current robot state) is a failure too.
+            and r["pick_place_exit"] == 2
         )
     else:
         stamp = time.strftime("%Y%m%d_%H%M%S")

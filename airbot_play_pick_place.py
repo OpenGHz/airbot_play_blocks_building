@@ -626,7 +626,10 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             self.basic_c.stop()
         except Exception:
             pass
-        rospy.set_param("/vision_attention", "pause")
+        try:  # 机械臂连接断开时 bringup（ROS master）往往也退出了；即使暂停不了视觉，也要记下动作失败
+            rospy.set_param("/vision_attention", "pause")
+        except Exception:
+            pass
         self._fault = fault
         self._fault_event.set()
 
@@ -646,7 +649,11 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             print("\n" + "=" * 60)
             print(f"动作失败：{f.what}")
             print(f"  原因：{f.error}")
-            print(f"  当前末端位置：{self._fmt_xyz(self._current_xyz())}")
+            try:  # 机械臂连接断开时取不到当前位置（正解要调 MoveIt 的服务）
+                where = self._fmt_xyz(self._current_xyz())
+            except Exception:
+                where = "取不到（和机械臂或 MoveIt 的连接断开了？）"
+            print(f"  当前末端位置：{where}")
             print(f"  已搭好 {self.built_count()} 块（不含手里的物块）")
             print(
                 "机械臂已停在原地。按回车回 Home 并退出" + ("，输入 r 再试一次" if f.retry else "") + "：",
