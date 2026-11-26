@@ -186,18 +186,9 @@ def robot_spec(cfg: dict) -> mujoco.MjSpec:
 
     cam = cfg["CAMERA"]
     mount = spec.body(cam["PARENT"]).add_body(name="eye_mount", pos=cam["POS"], quat=euler_xyz_to_quat(cam["EULER"]))
+    # The camera body itself is the URDF's camera_stand mesh on link6 (drawn, and a collision
+    # geom like the other links), with the lens at this camera's position.
     mount.add_camera(name="eye", fovy=cam["FOVY"])
-    # A small box behind the lens stands in for the USB camera housing, so the
-    # reach analysis does not let the camera scrape the table edge.
-    half = cam["HOUSING_HALF_SIZE"]
-    mount.add_geom(
-        name="eye_housing",
-        type=mujoco.mjtGeom.mjGEOM_BOX,
-        size=half,
-        pos=[0, 0, half[2]],
-        rgba=[0.08, 0.08, 0.08, 1],
-        mass=0.02,
-    )
     return spec
 
 

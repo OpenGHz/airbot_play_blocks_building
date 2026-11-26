@@ -5,7 +5,7 @@ above a spot, the way it lowers a block onto the tower or onto a cube to grasp.
 A height counts as reachable only if the IK solution stays continuous with its
 neighbour (so the straight-line move exists), the joints stay
 JOINT_LIMIT_MARGIN_DEG inside their limits, and every link, the fingers and the
-camera housing keep a clearance from the table top, columns and feet.
+camera (the camera_stand mesh on link6) keep a clearance from the table top, columns and feet.
 
 The tower is on the floor, so block 1 is released at PICK_GRASP_Z - H (base
 frame, H = table height). The highest table that still reaches the floor is the

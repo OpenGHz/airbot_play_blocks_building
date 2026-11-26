@@ -34,6 +34,7 @@ PICK_CUBES:                       # 抓取区的物块：相对 PICK_XY 的 [dx,
   - [0.03, 0.05, blue]
 
 # 腕部相机。来源：DISCOVERSE@957ef6c models/mjcf/airbot_play/airbot_play_cam.xml（c7e24ef "support mujoco" 用的 MuJoCo 配置）
+# 这里只定镜头的位置、朝向和画面；相机本体是模型里 link6 上的 camera_stand 网格（外观和碰撞都用它）。
 CAMERA:
   PARENT: link6
   POS: [-0.11, 0.0, -0.11]
@@ -42,4 +43,3 @@ CAMERA:
   WIDTH: 640
   HEIGHT: 480
   FPS: 30
-  HOUSING_HALF_SIZE: [0.015, 0.015, 0.012]
