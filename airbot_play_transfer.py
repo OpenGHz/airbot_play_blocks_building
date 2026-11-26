@@ -36,6 +36,16 @@ HELD_CUBE = "held_cube"
 TOWER = "tower"
 
 
+def clear_scene(ns: str) -> None:
+    """Take this program's floor, tower and held cube out of the MoveIt planning scene. move_group keeps
+    them after the program exits, so a run without the planning scene would otherwise still plan around
+    the boxes a run with it left behind."""
+    psi = PlanningSceneInterface(ns=ns, synchronous=True)
+    psi.remove_attached_object(name=HELD_CUBE)
+    for name in (TOWER, HELD_CUBE, *(f"floor_{i}" for i in range(4))):
+        psi.remove_world_object(name)
+
+
 class TransferError(RuntimeError):
     """A transfer segment could not be planned (the message says which one and where to)."""
 

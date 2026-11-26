@@ -50,7 +50,13 @@ def test_control_config(name):
 
 def test_real_robot_config_keeps_the_optional_behaviour_off():
     c = config_file.load(REPO / "configs/control/real.yaml")
-    for key in ("TRANSIT_Z_MIN", "PLACE_RETREAT_Y", "PICK_AREA_HALF_SIZE", "PLACE_TRACK_HALF_SIZE"):
+    for key in (
+        "TRANSIT_Z_MIN",
+        "PLACE_RETREAT_Y",
+        "PICK_AREA_HALF_SIZE",
+        "PLACE_TRACK_HALF_SIZE",
+        "PLACE_SETTLE_TIME",
+    ):
         assert key not in c, f"{key} changes the real robot's behaviour; it should stay commented out"
 
 

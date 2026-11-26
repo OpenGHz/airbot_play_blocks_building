@@ -195,7 +195,7 @@ gₙ = G + aₙ，所以 cₙ − cₙ₋₁ = (aₙ − aₙ₋₁) + (eₙ −
 
 所有放置选项加完之后统一做一次，不再每加一个选项单独比。
 
-- 对比的选项：闭环（默认）、开环（`open-place`）、闭环 + `--held-cube`、闭环 + `place-stop ε`、闭环 + `--held-cube` + `place-stop ε`，以及后续加的其他选项。转移方式两种：规划场景（默认）和固定路点（`no-scene`），各记录离塔的最小距离。e2e：`pixi run test-e2e floor|open-place|held-cube --blocks 8`，`floor`、`held-cube` 可再加 `--place-stop ε`。
+- 对比的选项：闭环（默认）、开环（`open-place`）、闭环 + `--held-cube`、闭环 + `place-stop ε`、闭环 + `--held-cube` + `place-stop ε`，以及后续加的其他选项。转移方式两种：固定路点（默认）和规划场景（`scene`，e2e 加 `--scene`），各记录离塔的最小距离。e2e：`pixi run test-e2e floor|open-place|held-cube --blocks 8`，`floor`、`held-cube` 可再加 `--place-stop ε`。
 - 每个选项跑两种条件：不加干扰；每块抓起后用 `pixi run sim-ctl cube nudge` 把手里的物块随机推 ±2 ~ 3 mm（人为抓偏，检验对随机抓取偏差的纠正）。
 - 每次各搭 8 块（或搭到上限），记录塔的逐层偏移，并分别录制视频：`pixi run sim-record`（整台机械臂 + 腕部相机小窗）和 `pixi run vision --record`（识别过程）。
 - 结果写成 md 文档，附视频，逐项对比说明。

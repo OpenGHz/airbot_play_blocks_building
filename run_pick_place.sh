@@ -26,10 +26,10 @@ while [ "$1" != "" ]; do
 	elif [ "$1" == "place-stop" ];then
 		place_stop="--place-stop=$2"
 		shift
-	elif [ "$1" == "no-scene" ];then
-		no_scene='--no-scene'
+	elif [ "$1" == "scene" ];then
+		scene='--scene'
     fi
     shift
 done
 
-python3 airbot_play_pick_place.py "${adjust}" "${adjust_param}" "${go}" "${go_param}" "${open_place}" "${place_stop}" "${no_scene}"
+python3 airbot_play_pick_place.py "${adjust}" "${adjust_param}" "${go}" "${go_param}" "${open_place}" "${place_stop}" "${scene}"

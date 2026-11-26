@@ -19,6 +19,19 @@ def release_z(place_z0: float, k: int, cube_height: float) -> float:
     return place_z0 + k * cube_height
 
 
+def place_settle_time(configured: float | None, first: bool) -> float:
+    """Seconds to wait once the gripper is at the tower, before releasing block 1 or, from block 2 on,
+    before the vision adjustment starts (the arm has to be still for both).
+
+    configured is PLACE_SETTLE_TIME. Not set: the old program's waits, 1 s before releasing block 1
+    and 3 s before adjusting (1 s at the height-check pose plus 2 s at the adjust pose, which is the
+    same point without a distance sensor).
+    """
+    if configured is not None:
+        return float(configured)
+    return 1.0 if first else 3.0
+
+
 def retreat_sign(pick_y: float, place_y: float) -> float:
     """Direction along y from the tower towards the pick area (+1 or -1)."""
     return 1.0 if pick_y - place_y >= 0 else -1.0

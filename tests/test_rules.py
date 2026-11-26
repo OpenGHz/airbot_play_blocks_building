@@ -10,6 +10,7 @@ from airbot_play_rules import (
     first_place_xy,
     floor_and_tower_z,
     place_aligned,
+    place_settle_time,
     release_z,
     retreat_sign,
     slot_axis,
@@ -18,6 +19,16 @@ from airbot_play_rules import (
 )
 
 H = 0.025  # CUBE_HEIGHT
+
+
+def test_settle_time_unset_keeps_the_old_waits():
+    assert place_settle_time(None, first=True) == 1.0  # before releasing block 1
+    assert place_settle_time(None, first=False) == 3.0  # before the vision adjustment: 1 s + 2 s
+
+
+def test_settle_time_set_applies_to_every_block():
+    assert place_settle_time(0.5, first=True) == 0.5
+    assert place_settle_time(2, first=False) == 2.0
 
 
 def test_release_height_with_the_default_place_height_is_unchanged():

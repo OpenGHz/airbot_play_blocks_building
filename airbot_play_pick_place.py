@@ -18,15 +18,16 @@ from airbot_play_rules import (
     first_place_xy,
     floor_and_tower_z,
     place_aligned,
+    place_settle_time,
     release_z,
     retreat_sign,
     slot_axis,
     slot_exit_targets,
 )
-from airbot_play_transfer import TowerScene, Transfer
+from airbot_play_transfer import TowerScene, Transfer, clear_scene
 
 GRIPPER_LINKS = ("link6", "left", "right")  # 抓着的物块可以接触的连杆（airbot_play URDF）
-NO_SCENE_RETREAT = 0.075  # 不用规划场景（--no-scene）时，松开上升后朝抓取区一侧侧移的距离（原来的固定值）
+NO_SCENE_RETREAT = 0.075  # 不用规划场景（默认）时，松开上升后朝抓取区一侧侧移的距离（原来的固定值）
 
 
 class TaskFault(Exception):
@@ -130,6 +131,8 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         # 转移路径（规划场景）的可选项
         self._transit_z_min = configs.get("TRANSIT_Z_MIN")  # 抓起后横移时末端的最低高度；不设时与原来一样
         self._retreat_y = configs.get("PLACE_RETREAT_Y", 0.0)  # 松开上升后沿y侧移的距离（自动朝抓取区一侧）；0为不侧移
+        # 到塔上方后停稳的时间（第1块松开前、之后开始视觉调节前）；不写时和原来一样（airbot_play_rules.place_settle_time）
+        self._place_settle = configs.get("PLACE_SETTLE_TIME")
         # 跟踪范围限位：视觉跟踪的目标xy超出矩形时不执行这一步，防止锁定抓取区外 / 塔上的同色物块
         # 半边长不写时该阶段不限位；连续 OUT_OF_AREA_FRAMES 帧超出时放弃（见 airbot_play_rules.TrackLimit）
         frames = configs.get("OUT_OF_AREA_FRAMES", 10)
@@ -172,21 +175,21 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         self._gap_disget = self._gap_place  # 检测物块搭建的实际高度时的位置裕量
         rospy.loginfo(f"gap_place: {self._gap_place}")
 
-    def task_pick_place_param_init(self, use_scene=True, use_tof=False, control_mode="g_i"):
+    def task_pick_place_param_init(self, use_scene=False, use_tof=False, control_mode="g_i"):
         """初始化搭积木任务的参数。真机和MuJoCo仿真用同一套代码，差别只在配置文件（configs/control/real.yaml、sim.yaml）"""
         self.place_mode = 0  # 放置方式，由PickPlace设置（0闭环，1开环，2键控）
         # 闭环放置的不对称停下条件（--place-stop）：沿逼近方向剩余偏差小于这么多像素才停；None为原来的 |dx|、|dy| < 2 px
         self.place_stop = None
         # 第2块起夹爪从塔沿末端z轴（两指之间的空隙方向）少FIRST_PLACE_SHIFT的一侧逼近
         self._approach = slot_axis(self.euler_to_quaternion(self._place_rpy))
-        # 规划场景：地面和塔作为碰撞体，抓取区与塔之间的转移交给MoveIt绕行；use_scene为False（--no-scene）时走原来的固定路点
+        # 规划场景（--scene）：地面和塔作为碰撞体，抓取区与塔之间的转移交给MoveIt绕行；默认（use_scene为False）走原来的固定路点
         self._use_scene = use_scene
         # 第一块的放置位置：沿放置姿态下末端z轴（两指之间的空隙方向）多放0.01。原来加在基座x上，
         # 放置姿态为rpy(0, pi/2, 0)时两者相同。塔在规划场景里就放在这里
         self._first_xy = first_place_xy(self._place_xy, self.euler_to_quaternion(self._place_rpy))
         floor_z, tower_z = floor_and_tower_z(self._pick_base_z, self._place_z0, self._cube_height)
         self._tower_bottom_z = tower_z  # 回Home前判断手指是否还在塔顶物块两侧时用（规划场景之外也要）
-        # 直线段（竖直上升、沿手指间的空隙移出）不做碰撞检查，不需要规划场景，--no-scene时也用
+        # 直线段（竖直上升、沿手指间的空隙移出）不做碰撞检查，不需要规划场景，不用规划场景时也用
         self._transfer = Transfer(self, None)
         if self._use_scene:
             # 塔只会沿两指之间的空隙方向前后倾斜，倾斜量不会超过一个边长（再多就倒了），碰撞体沿这个方向两边各加长一个边长
@@ -210,6 +213,8 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
                     else "松开后竖直上升，不侧移"
                 )
             )
+        else:  # 上次用规划场景运行时留在 move_group 里的地面和塔要去掉，否则这次的规划仍会绕开它们
+            clear_scene(self.basic_c.get_name_space())
         # 根据load的分量组建完整pose
         self.prepose_pick_scan = tuple(self._pick_scan_xyz_dict[0]) + self._pick_rpy
         self.prepose_pick_base = (*self._pick_scan_xyz_dict[0][:2], self._pick_base_z) + self._pick_rpy
@@ -706,7 +711,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
     def _go_home_and_exit(self):
         """
         先竖直上升离开塔顶（直线能走多少走多少）。到上限时竖直上升往往走不完，张开的手指还在塔顶物块两侧：
-        这时先沿手指间的空隙水平移出。之后在规划场景（含塔）里规划回Home；不用规划场景（--no-scene）时直接回Home。
+        这时先沿手指间的空隙水平移出。之后在规划场景（含塔）里规划回Home；不用规划场景（默认）时直接回Home。
         规划不出或移不出时停下提示，不硬走。
         """
         rospy.set_param("/vision_attention", "pause")
@@ -981,7 +986,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         scene_return = from_place and self._use_scene
         if scene_return:
             self._return_to_pick()  # 竖直上升 →（可选）侧移 → 规划场景内回到PickJoint，一条轨迹
-        elif from_place:  # 不用规划场景（--no-scene）：竖直上升离开塔顶，朝抓取区一侧侧移，再回PickJoint
+        elif from_place:  # 不用规划场景（默认）：竖直上升离开塔顶，朝抓取区一侧侧移，再回PickJoint
             pose1 = deepcopy(self.last_target_pose.pose)
             pose1.position.z = self.last_xyz[2] + self._cube_height + 0.01  # 先上升
             pose2 = deepcopy(pose1)
@@ -1072,7 +1077,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         s3 = t.line(t.end(s2), [*xy, z_end], qp, "竖直下降到放置位置" if first else "竖直下降到调节位置")
         self._scene.hide_tower()
         t.run(start, [s1, s2, s3], vel=0.5, acc=0.3, end_xyz=[*xy, z_end], end_rpy=self._place_rpy)
-        rospy.sleep(0.5)  # 停稳
+        rospy.sleep(place_settle_time(self._place_settle, first))  # 停稳
         if not first:
             self.loginfo(
                 f"到达第一块正上方，开环叠放第{k + 1}个物块"
@@ -1087,7 +1092,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             self._go_to_tower(first)
             return
 
-        # 不用规划场景（--no-scene），或键控、测距时：原来的固定路点
+        # 不用规划场景（默认），或键控、测距时：原来的固定路点
         def prepare(first):  # pick区域先上升，然后调整xy为place时的位置
             pose1 = deepcopy(self.last_target_pose.pose)
             if first:
@@ -1112,7 +1117,11 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
                 acc_limit=0.2,
             )
             self.set_and_go_to_pose_target(
-                [*self._first_xy, self._place_base_z], self._place_rpy, sleep_time=1, vel_limit=0.2, acc_limit=0.2
+                [*self._first_xy, self._place_base_z],
+                self._place_rpy,
+                sleep_time=place_settle_time(self._place_settle, True),  # 停稳后松开
+                vel_limit=0.2,
+                acc_limit=0.2,
             )
             return
         disget_z = self._place_base_z + self._gap_disget
@@ -1127,20 +1136,30 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             return
         # 闭环时到放置点上方，偏差由视觉调节补回；开环没有调节，直接到第一块的正上方（和规划场景时相同）
         xy = self._first_xy if place_mode == 1 else self._place_xy
+        # 停稳：原来在测高位置等 1 s（测距时 2 s）、调节位置等 2 s；没有测距传感器时两者是同一点，
+        # 设了 PLACE_SETTLE_TIME 时只在调节位置等这么久
+        detect_sleep = 2 if use_tof else (1 if self._place_settle is None else 0)
+        adjust_sleep = 2 if self._place_settle is None else self._place_settle
         if use_tof:
             self.set_and_go_to_pose_target(
-                [self._place_detect_x, xy[1], disget_z], self._place_rpy, sleep_time=2, vel_limit=0.4, acc_limit=0.2
+                [self._place_detect_x, xy[1], disget_z],
+                self._place_rpy,
+                sleep_time=detect_sleep,
+                vel_limit=0.4,
+                acc_limit=0.2,
             )
         else:
             print(xy, disget_z, self._place_rpy)
-            self.set_and_go_to_pose_target([*xy, disget_z], self._place_rpy, sleep_time=1, vel_limit=0.4, acc_limit=0.2)
+            self.set_and_go_to_pose_target(
+                [*xy, disget_z], self._place_rpy, sleep_time=detect_sleep, vel_limit=0.4, acc_limit=0.2
+            )
         # 停稳后（一定要保证停稳），获取物块此时的配合值（必然大于0且小于(0.025+self._above_gap_disget)，若大于0.025则上次物块搭建是失败了的，为此整轮应进行回退）
         self.distance_detect(use_tof=use_tof)
         # 然后移动到可以开始调节的位置
         print("Go to adjust pose.")
         adjust_z = disget_z - self.delta_cube_z + self._gap_place
         # 实机当高度增加时，会出现x方向前移的问题，造成下层物块难识别，为此调节位置x方向向后偏移一定距离
-        self.set_and_go_to_pose_target([*xy, adjust_z], self._place_rpy, sleep_time=2)
+        self.set_and_go_to_pose_target([*xy, adjust_z], self._place_rpy, sleep_time=adjust_sleep)
         k = self._change_pick_place_state.times
         self.loginfo(
             f"到达第一块正上方，开环叠放第{k + 1}个物块"
@@ -1328,10 +1347,10 @@ if __name__ == "__main__":
         "(the far side and across keep 2 px); default: |dx|, |dy| < 2 px",
     )
     parser.add_argument(
-        "--no-scene",
+        "--scene",
         action="store_true",
-        help="move between the pick area and the tower by the old fixed waypoints, without the MoveIt "
-        "planning scene (floor and tower are not collision-checked)",
+        help="put the floor and the tower into the MoveIt planning scene and plan the moves between the pick "
+        "area and the tower around them; default: the old fixed waypoints, floor and tower not collision-checked",
     )
     args, unknown = parser.parse_known_args()
 
@@ -1354,9 +1373,14 @@ if __name__ == "__main__":
     rospy.loginfo(f"load control config from {file_path}")
     airbot_player.load_configs(file_path)
 
-    airbot_player.task_pick_place_param_init(use_scene=not args.no_scene)
-    if args.no_scene:
-        rospy.loginfo("不用规划场景：抓取区和塔之间按原来的固定路点移动，地面和塔不做碰撞检查")
+    airbot_player.task_pick_place_param_init(use_scene=args.scene)
+    if not args.scene:
+        rospy.loginfo("抓取区和塔之间按原来的固定路点移动，地面和塔不做碰撞检查（加 scene 改用规划场景）")
+    settle = airbot_player._place_settle
+    rospy.loginfo(
+        "到塔上方后停稳："
+        + ("和原来一样，第1块松开前 1 s，之后开始调节前 3 s" if settle is None else f"{settle} s（PLACE_SETTLE_TIME）")
+    )
     # 传入args.control_param参数，则进行参数配置阻塞以及自动夹取控制
     print("args.control_param=", control_param)
     if control_param >= 0:

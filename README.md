@@ -90,7 +90,7 @@ pixi run vision -vd 2                 # 终端 3
 
 **不对称的放置停下条件**（`pixi run pick-place go P1 P2 place-stop 0.5`，可选）：默认的闭环放置在 |dx|、|dy| < 2 px 时就停，从第 2 块起夹爪总从塔的同一侧逼近，停在 2 px 死区的这一侧边缘，每层偏约 1 mm 并逐层累加。加 `place-stop ε` 后，沿逼近方向（两指之间的空隙方向）剩余偏差小于 ε 像素才停，越过 2 px 以内或横向 2 px 以内照旧停。ε 越小每层偏得越少，调节的步数越多；ε 不能为 0（识别以 0.5 px 为单位）。
 
-**不用规划场景**（`pixi run pick-place go P1 P2 no-scene`，可选）：默认在 MoveIt 规划场景里放入地面和塔，抓取区和塔之间的移动绕开它们规划，安全依赖模型（手指、塔的碰撞体）和实际的接近程度。加 `no-scene` 后按原来的固定路点移动（先升高、再水平移、松开后上升并朝抓取区一侧侧移 7.5 cm），不做碰撞检查，安全靠这些按真机布局定的余量，段之间会停一下。详见 [docs/pick_place_flow.md](docs/pick_place_flow.md) §4。
+**用规划场景**（`pixi run pick-place go P1 P2 scene`，可选）：默认和原来的程序一样，抓取区和塔之间按固定路点移动（先升高、再水平移、松开后上升并朝抓取区一侧侧移 7.5 cm），不做碰撞检查，安全靠这些按真机布局定的余量，段之间会停一下。加 `scene` 后在 MoveIt 规划场景里放入地面和塔，抓取区和塔之间的移动绕开它们规划、一条轨迹走完，安全依赖模型（手指、塔的碰撞体）和实际的接近程度。不加 `scene` 时程序启动会去掉上次加 `scene` 运行时留在 MoveIt 里的地面和塔。详见 [docs/pick_place_flow.md](docs/pick_place_flow.md) §2、§4。
 
 **看手里的物块**（`pixi run vision -vd 2 --held-cube`，可选）：默认的闭环放置让夹爪对准塔顶物块，物块在夹爪里的偏差原样带到塔上（[分析](docs/place_closed_loop_analysis.md)）。加 `--held-cube` 后，Place 阶段同时识别手里的物块（另一种颜色，图像最下面），按它沿两指空隙方向偏离夹爪中心多少移动对准目标，让手里的物块对准塔顶物块；手指开合方向不修正。需要视觉配置里的 `EXPECT_HELD_REF`、`HELD_SCALE`：仿真里由 `pixi run sim-calib-vision --apply` 算出，真机上还没有标定（方法见 `configs/vision/real.yaml` 里的注释）。看不到手里的物块时不发偏差，机械臂停在原地。
 
@@ -113,7 +113,7 @@ pixi run vision -vd 2                 # 终端 3
 | `keyboard` | `scripts/keyboard.sh` → `rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/<env_type>.yaml` | 键盘遥控 |
 | `hsv-finder` | `scripts/hsv_finder.sh` → `python demo/hsv_finder.py` | 滑动条确定 HSV 阈值 |
 | `vision` | `scripts/vision.sh` → `python Best_Contour.py -cfg ./configs/vision/<env_type>.yaml` | 物块识别，窗口内容见下面的"视觉窗口" |
-| `pick-place` | `bash run_pick_place.sh` | 搭积木控制（`adjust 0/1`、`go <p1> <p2>`，加 `open-place` 为开环放置，加 `place-stop ε` 为不对称的放置停下条件，加 `no-scene` 为不用规划场景、按原来的固定路点移动） |
+| `pick-place` | `bash run_pick_place.sh` | 搭积木控制（`adjust 0/1`、`go <p1> <p2>`，加 `open-place` 为开环放置，加 `place-stop ε` 为不对称的放置停下条件，加 `scene` 为用规划场景绕开地面和塔规划移动） |
 | `record` | `python data_driven/record_data.py` | 录制演示数据 |
 
 `pixi task list` 可以随时查看。
@@ -162,9 +162,10 @@ ARM_URL=192.168.1.10 ARM_PORT=50051 pixi run bringup
 
 | 键 | 作用 |
 |----|------|
-| `TRANSIT_Z_MIN` | 抓起后横移时末端的最低高度。地面搭塔建议设为 `PICK_GRASP_Z + CUBE_HEIGHT + 0.01`，手里的物块先越过抓取区的其他物块 |
+| `PLACE_SETTLE_TIME` | 到塔上方后停稳的时间（s）：第 1 块松开前、之后开始视觉调节前都等这么久。不设时和原来一样，第 1 块 1 s，之后 3 s |
+| `TRANSIT_Z_MIN` | 只在用规划场景（`scene`）时：抓起后横移时末端的最低高度。地面搭塔建议设为 `PICK_GRASP_Z + CUBE_HEIGHT + 0.01`，手里的物块先越过抓取区的其他物块 |
 | `PICK_AREA_HALF_SIZE`、`PLACE_TRACK_HALF_SIZE` | 跟踪范围：视觉跟踪时末端只能在抓取区 / 塔周围的矩形内，防止锁定抓取区外或塔上的同色物块。半边长取"物块分布范围的一半 + 约 3 cm"；抓取区不以扫描点为中心时再设 `PICK_AREA_CENTER` |
-| `PLACE_RETREAT_Y` | 放好、竖直上升后沿 y 侧移的距离，方向自动朝抓取区一侧。不设时不侧移，只靠规划场景绕开塔 |
+| `PLACE_RETREAT_Y` | 只在用规划场景（`scene`）时：放好、竖直上升后沿 y 侧移的距离，方向自动朝抓取区一侧。不设时不侧移，只靠规划场景绕开塔（不用规划场景时固定侧移 7.5 cm） |
 
 ## 仿真
 
@@ -199,7 +200,7 @@ pixi run pick-place go 90 100    # 终端 2：完整运行
 | 任务 | 说明 |
 |------|------|
 | `test` | 单元测试和机械臂驱动的契约测试（仿真驱动连不开窗口的仿真，`airbot_py` 驱动连假的 `airbot_server`），不需要 ROS。GitHub Actions 上也跑这一项 |
-| `test-e2e <场景>` | 在仿真里跑完整流程（独立的 ROS master，不影响正在运行的程序），日志和结果在 `runs/e2e/`。场景：`floor`（地面搭 6 块）、`open-place`（同上，开环放置）、`held-cube`（同上，视觉加 `--held-cube`；`floor`、`held-cube` 可再加 `--place-stop 0.5`；`floor`、`open-place`、`held-cube`、`limit`、`golden` 可再加 `--no-scene`）、`limit`（真机布局搭到上限，按回车回 Home）、`baseline`（改动前的程序，应在第 6 块后卡住；真机用旧模型时是第 7 块）、`kill-sim`（中途关掉仿真）、`golden`（改动前后发给 MoveIt 的运动目标对比） |
+| `test-e2e <场景>` | 在仿真里跑完整流程（独立的 ROS master，不影响正在运行的程序），日志和结果在 `runs/e2e/`。场景：`floor`（地面搭 6 块）、`open-place`（同上，开环放置）、`held-cube`（同上，视觉加 `--held-cube`；`floor`、`held-cube` 可再加 `--place-stop 0.5`；`floor`、`open-place`、`held-cube`、`limit`、`golden` 可再加 `--scene`，用规划场景）、`limit`（真机布局搭到上限，按回车回 Home）、`baseline`（改动前的程序，应在第 6 块后卡住；真机用旧模型时是第 7 块）、`kill-sim`（中途关掉仿真）、`golden`（改动前后发给 MoveIt 的运动目标对比） |
 | `lint` | 检查 Python 代码的格式和常见问题（ruff，规则在 `ruff.toml`，不含 `ros_ws/src` 下的子模块），GitHub Actions 上也跑 |
 | `fmt` | 按 ruff 格式化代码并应用安全的自动修复；提交前跑一次，`lint` 就能通过 |
 

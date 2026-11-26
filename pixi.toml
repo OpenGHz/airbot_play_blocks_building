@@ -81,7 +81,7 @@ pick-place = { cmd = "bash run_pick_place.sh", description = "Pick-and-place con
 record = { cmd = "python data_driven/record_data.py", description = "Record a demonstration episode" }
 
 # Tests (plan §8). `test`: unit tests and arm-driver contract tests, no ROS master needed (also run on GitHub Actions).
-# `test-e2e SCENARIO`: the whole stack in the simulation on a private ROS master (floor, open-place, held-cube, limit, baseline, kill-sim, golden; floor and held-cube take --place-stop PX, most take --no-scene).
+# `test-e2e SCENARIO`: the whole stack in the simulation on a private ROS master (floor, open-place, held-cube, limit, baseline, kill-sim, golden; floor and held-cube take --place-stop PX, most take --scene).
 test = { cmd = "python -m pytest -q tests", description = "Unit tests and arm-driver contract tests (no ROS master needed)" }
 test-e2e = { cmd = "python tests/e2e/sim_e2e.py", description = "End-to-end run in the simulation: floor | open-place | held-cube | limit | baseline | kill-sim | golden" }
 

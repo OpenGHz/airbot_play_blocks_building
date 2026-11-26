@@ -15,10 +15,11 @@ Scenarios
             held cube and aligns it, not the gripper, with the tower's top block.
   --place-stop PX (floor, held-cube): also run the program with `--place-stop PX`: the place
             stage stops only when the remaining move along the approach is below PX pixels.
-  --no-scene (floor, open-place, held-cube, limit, golden): run the program with `--no-scene`, the
-            old fixed waypoints instead of the planning scene. The transfers then stop between
-            waypoints, so floor-like scenarios do not require transfers without stops; golden
-            compares the old program with the new one's --no-scene path.
+  --scene (floor, open-place, held-cube, limit, golden): run the program with `--scene`, the
+            planning scene instead of the default fixed waypoints. The transfers are then one
+            trajectory each, so floor-like scenarios also require transfers without stops (the
+            fixed waypoints stop between segments); golden compares the old program with the new
+            one's --scene path.
   limit     configs/control/real.yaml, tabletop scene (the real robot's layout, tower on the
             other side of the pick area): build until the arm cannot go higher, answer the
             prompt with Enter. Expected: LIMIT_BLOCKS (6) blocks, back Home, exit status 0.
@@ -758,13 +759,13 @@ def main() -> int:
         "--place-stop", type=float, metavar="PX", help="floor, held-cube: run the program with --place-stop PX"
     )
     ap.add_argument(
-        "--no-scene",
+        "--scene",
         action="store_true",
-        help="floor, open-place, held-cube, limit, golden: run the program with --no-scene (the old fixed waypoints)",
+        help="floor, open-place, held-cube, limit, golden: run the program with --scene (the planning scene)",
     )
     args = ap.parse_args()
-    no_scene = ("--no-scene",) if args.no_scene else ()
-    suffix = "-noscene" if args.no_scene else ""
+    scene_args = ("--scene",) if args.scene else ()
+    suffix = "-scene" if args.scene else ""
     if args.scenario in ("floor", "open-place", "held-cube"):
         extra = ("--open-place",) if args.scenario == "open-place" else ()
         name = args.scenario
@@ -776,7 +777,7 @@ def main() -> int:
             "floor",
             "sim",
             policy=stop_after(args.blocks),
-            args=extra + no_scene,
+            args=extra + scene_args,
             vision_args=vision_extra,
         )
         # exit 0 after the Ctrl+C that ends the run: it used to abort now and then (-6) when a MoveIt call
@@ -784,11 +785,11 @@ def main() -> int:
         ok = (
             r["blocks"] >= args.blocks
             and not r["tower_disturbed"]
-            and (args.no_scene or r["stops_in_transfers"] == 0)
+            and (not args.scene or r["stops_in_transfers"] == 0)
             and r["pick_place_exit"] == 0
         )
     elif args.scenario == "limit":
-        r = run("limit" + suffix, "tabletop", "real", policy=answer_enter, args=no_scene)
+        r = run("limit" + suffix, "tabletop", "real", policy=answer_enter, args=scene_args)
         ok = (
             r["pick_place_exit"] == 0
             and r["fault_prompts"] == 1
@@ -819,7 +820,7 @@ def main() -> int:
                 record=True,
                 out=base / program,
                 policy=detect_freeze(15, need_blocks=False),
-                args=no_scene if program == "new" else (),
+                args=scene_args if program == "new" else (),
             )
             print(summary(runs[program], tower=False), flush=True)
         cmp = compare(load_motion(base / "old/motion.jsonl"), load_motion(base / "new/motion.jsonl"))
