@@ -23,7 +23,9 @@ https://github.com/TATP-233/DISCOVERSE (MIT licence), commit `d67f47c` (2026-02-
   kinematic chain was already the same.
 - Base plate: DISCOVERSE's arm_base box (275 x 161.2 x 5 mm, long side along x, centre x = -0.02)
   as the `base_plate` box of `base_link`, lowered so that its bottom is at z = 0 (the surface the arm
-  stands on).
+  stands on), and turned 90 degrees about the arm's axis (the arm can be bolted onto the plate either
+  way): long side along y, centre y = -0.02. The plate's front edge is then 80.6 mm in front of the
+  base centre instead of 117.5 mm, so the arm stands closer to the table edge.
 - Kept from the original URDF: link and joint names, joint limits, inertials, the finger joint
   convention (q = 0 open, gap 71.5 mm - 2q) and the `custom_end_link` axes. The wrist camera is not
   part of the URDF; the simulation keeps its own camera mount (configs/scene/sim.yaml).

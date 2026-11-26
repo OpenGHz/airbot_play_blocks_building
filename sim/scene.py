@@ -48,20 +48,25 @@ DEFAULT_SCENE = "floor"
 ARM_JOINTS = [f"joint{i}" for i in range(1, 7)]
 FINGER_JOINTS = ["endleft", "endright"]
 EEF_BODY = "custom_end_link"
+COLLISION_GROUP = 3  # geom group of the arm's collision geoms; MuJoCo draws groups 0-2 by default
 # Finger joint travel per side; the inner gap is 0.0715 - 2 * q.
 FINGER_OPEN, FINGER_GAP_AT_ZERO = 0.0, 0.0715
 
 
-def base_plate() -> tuple[float, float, float]:
-    """The arm's base plate from the URDF (collision box "base_plate" of base_link), base frame:
-    (front, back, half_width) = how far it reaches forward (+x), backward (-x) and to each side (y)."""
+def base_plate() -> tuple[float, float, float, float]:
+    """The arm's base plate from the URDF (collision box "base_plate" of base_link): its outline
+    (x0, x1, y0, y1) in the base frame. x1 is how far it reaches forward, y1 to the left."""
     import xml.etree.ElementTree as ET
 
     for c in ET.parse(URDF).getroot().iter("collision"):
         if c.get("name") == "base_plate":
-            x = float(c.find("origin").get("xyz").split()[0])
+            o = c.find("origin")
+            x, y, _ = (float(v) for v in o.get("xyz").split())
+            yaw = float(o.get("rpy", "0 0 0").split()[2])
             sx, sy, _ = (float(v) for v in c.find("geometry/box").get("size").split())
-            return x + sx / 2, sx / 2 - x, sy / 2
+            hx = round(abs(math.cos(yaw)) * sx / 2 + abs(math.sin(yaw)) * sy / 2, 5)  # 1.5708 is not exactly pi/2
+            hy = round(abs(math.sin(yaw)) * sx / 2 + abs(math.cos(yaw)) * sy / 2, 5)
+            return x - hx, x + hx, y - hy, y + hy
     raise ValueError(f"{URDF}: no collision box named base_plate")
 
 
@@ -101,11 +106,11 @@ def table_rect(cfg: dict):
                    BASE_FRONT (optional) puts the edge that far in front of the base
                    centre instead; it cannot be closer than the plate's front."""
     depth, width = cfg["TABLE_DEPTH"], cfg["TABLE_WIDTH"]
-    front, _, half_w = base_plate()
+    _, front, _, left = base_plate()
     mount = cfg.get("MOUNT", "side")
     if mount == "side":
         x0 = -cfg["SIDE_MOUNT_BACK"]
-        return (x0, x0 + depth, half_w - width, half_w), (0.0, 1.0)
+        return (x0, x0 + depth, left - width, left), (0.0, 1.0)
     if mount == "front":
         x1 = cfg.get("BASE_FRONT", front)
         if x1 < front - 1e-9:
@@ -165,6 +170,13 @@ def robot_spec(cfg: dict) -> mujoco.MjSpec:
     text = re.sub(r"(<robot[^>]*>)", r"\1" + compiler, text, count=1)
     spec = mujoco.MjSpec.from_string(text)
 
+    # The URDF's collision meshes are copies of its visual meshes, but MuJoCo gives all of a link's
+    # collision geoms one colour (that of one of its visuals): drawn, the white collision copy of a
+    # black part covers it. Like DISCOVERSE, keep collision geoms in group COLLISION_GROUP, which
+    # the viewer, the snapshots and the wrist camera do not draw.
+    for geom in spec.geoms:
+        if geom.contype or geom.conaffinity:
+            geom.group = COLLISION_GROUP
     for body in spec.bodies:
         if body.name != "world":
             body.gravcomp = 1.0  # the real arm compensates gravity in firmware
@@ -387,6 +399,7 @@ def build_physics(cfg: dict | None = None):
             size=half,
             pos=center,
             rgba=[0.2, 0.2, 0.2, 0.0],
+            group=COLLISION_GROUP,
             friction=[1.5, 0.01, 0.0001],
             condim=4,
             solref=[cfg.get("CONTACT_TIMECONST", CONTACT_TIMECONST), 1.0],
@@ -432,8 +445,8 @@ def mount_limits(cfg: dict) -> tuple[float, float, float, float]:
     """(x0, x1, y0, y1) in the scene frame the arm base centre may be moved within: the whole base
     plate stays on the table top."""
     (x0, x1, y0, y1), _ = table_rect(cfg)
-    front, back, half_w = base_plate()
-    return x0 + back, x1 - front, y0 + half_w, y1 - half_w
+    px0, px1, py0, py1 = base_plate()
+    return x0 - px0, x1 - px1, y0 - py0, y1 - py1
 
 
 def without_mount_offset(cfg: dict) -> dict:

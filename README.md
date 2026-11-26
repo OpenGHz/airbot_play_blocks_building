@@ -171,7 +171,7 @@ ARM_URL=192.168.1.10 ARM_PORT=50051 pixi run bringup
 
 用 MuJoCo 仿真代替机械臂容器，其他终端的命令和真机相同。`bringup` 会自动发现仿真中的机械臂，各程序改用 `configs/*/sim.yaml`；抓取区的物块被抓完后会自动重新摆放。
 
-机械臂和夹爪的模型（网格、小臂长度、底板）取自 DISCOVERSE 最新的 airbot_play 模型，MoveIt 和仿真用同一份 URDF（来源见 `ros_ws/src/airbot_play_models/*/SOURCE.md`）；腕部相机的安装位置沿用原来的仿真。机械臂立在 275 × 161 mm 的底板上，底板整块放在桌面上，前沿和桌沿齐平。末端点 `custom_end_link` 在两指的指尖，配置里的高度都是指尖的高度。真机（新款，小臂 290 mm）也用这份模型：`configs/control/real.yaml` 里是期望位姿，换模型后不用改。和以前（旧模型，末端点在指尖上方 5.6 mm）相比，真机指尖实际到达的位置：抓取处前移约 17 mm，塔处偏约 (+14, +11) mm；扫描、下抓和低层放置的高度相差不到 1.5 mm，所以 `configs/vision/real.yaml` 的参考值仍然可用；在 MoveIt 里竖直上升能到的高度变低，塔的上限从 7 块变成 6 块。
+机械臂和夹爪的模型（网格、小臂长度、底板）取自 DISCOVERSE 最新的 airbot_play 模型，MoveIt 和仿真用同一份 URDF（来源见 `ros_ws/src/airbot_play_models/*/SOURCE.md`）；腕部相机的安装位置沿用原来的仿真。机械臂立在 275 × 161 mm 的底板上，底板转了 90°（长边左右、短边前后，底座中心离底板前沿 80.6 mm），整块放在桌面上，前沿和桌沿齐平。机械臂的碰撞体（和外观网格重合）不画出来，在 MuJoCo 窗口左侧的 Group enable 里勾上 Geom 3 可以看到。末端点 `custom_end_link` 在两指的指尖，配置里的高度都是指尖的高度。真机（新款，小臂 290 mm）也用这份模型：`configs/control/real.yaml` 里是期望位姿，换模型后不用改。和以前（旧模型，末端点在指尖上方 5.6 mm）相比，真机指尖实际到达的位置：抓取处前移约 17 mm，塔处偏约 (+14, +11) mm；扫描、下抓和低层放置的高度相差不到 1.5 mm，所以 `configs/vision/real.yaml` 的参考值仍然可用；在 MoveIt 里竖直上升能到的高度变低，塔的上限从 7 块变成 6 块。
 
 ```bash
 pixi run sim                     # 终端 0：仿真（代替 airbot_server），打开 MuJoCo 窗口
