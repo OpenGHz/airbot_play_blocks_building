@@ -11,8 +11,8 @@ one ends), joined into one trajectory and retimed, so it runs without stopping i
 
 All heights come from the control config; nothing has to be measured (see
 airbot_play_rules.floor_and_tower_z): the floor top is half a cube plus FLOOR_MARGIN below
-the lower of PICK_GRASP_Z and PLACE_POSITION_Z, the tower bottom half a cube below
-PLACE_POSITION_Z, plus one CUBE_HEIGHT per block.
+the lower of pick_grasp_z and place_position_z, the tower bottom half a cube below
+place_position_z, plus one cube_height per block.
 The tower box is TOWER_INFLATE larger on every side and on top (a block that was not put down
 flat, the arm not following the planned path exactly), and one more block edge each way along
 the finger gap, the only direction the tower leans in (airbot_play_rules.tower_footprint).

@@ -15,7 +15,7 @@
                                             from the scene file's mount, m and deg); only the arm moves,
                                             like the real one
   sim-ctl arm save                          keep the current mount for the next `pixi run sim`
-                                            (MOUNT_OFFSET, MOUNT_YAW in the scene file)
+                                            (mount_offset, mount_yaw in the scene file)
 
 In the MuJoCo window: double-click a cube or the arm base, then Ctrl + right drag moves it
 (with Shift: along the floor / table top) and Ctrl + left drag turns it. A cube you let

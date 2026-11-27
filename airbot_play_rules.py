@@ -10,11 +10,23 @@ import math
 FLOOR_MARGIN = 0.005  # the floor's top is this much below the lowest cube bottom the config implies
 
 
+def old_key_names(cfg: dict, path) -> str:
+    """ "" or the error for a config file written before the key names became lower case
+    (PICK_POSITION_X -> pick_position_x): top-level keys still in upper case."""
+    old = [k for k in cfg if isinstance(k, str) and k.isupper()]
+    if not old:
+        return ""
+    return (
+        f"{path}：参数名已经改成小写（{old[0]} 改为 {old[0].lower()}），这个文件里还有 {len(old)} 个大写的参数名。"
+        "把参数名改成小写，或对照仓库里的同名文件修改"
+    )
+
+
 def release_z(place_z0: float, k: int, cube_height: float) -> float:
     """End-effector height when releasing block k+1 onto a tower of k blocks.
 
-    place_z0 is PLACE_POSITION_Z (the release height of the first block); every layer
-    adds one CUBE_HEIGHT. (The old code used PICK_GRASP_Z from the second block on.)
+    place_z0 is place_position_z (the release height of the first block); every layer
+    adds one cube_height. (The old code used pick_grasp_z from the second block on.)
     """
     return place_z0 + k * cube_height
 
@@ -23,7 +35,7 @@ def place_settle_time(configured: float | None, first: bool) -> float:
     """Seconds to wait once the gripper is at the tower, before releasing block 1 or, from block 2 on,
     before the vision adjustment starts (the arm has to be still for both).
 
-    configured is PLACE_SETTLE_TIME. Not set: the old program's waits, 1 s before releasing block 1
+    configured is place_settle_time. Not set: the old program's waits, 1 s before releasing block 1
     and 3 s before adjusting (1 s at the height-check pose plus 2 s at the adjust pose, which is the
     same point without a distance sensor).
     """
@@ -100,11 +112,11 @@ def slot_axis(xyzw) -> tuple[float, float]:
     return ax / n, ay / n
 
 
-FIRST_PLACE_SHIFT = 0.01  # the real robot releases the first block this much off PLACE_POSITION_X/Y (m)
+FIRST_PLACE_SHIFT = 0.01  # the real robot releases the first block this much off place_position_x/y (m)
 
 
 def first_place_xy(place_xy, xyzw, shift: float = FIRST_PLACE_SHIFT) -> tuple[float, float]:
-    """Where the real robot releases the first block: PLACE_POSITION_X/Y moved `shift` along
+    """Where the real robot releases the first block: place_position_x/y moved `shift` along
     custom_end_link's z axis at the place orientation (xyzw), i.e. along the gap between the fingers.
 
     The fingers hold a block along their opening direction only, so a grasped block can be off

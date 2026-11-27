@@ -91,8 +91,8 @@ def test_home_and_save(app, panel):
     p.mount.axes["yaw"].spin.setValue(5.0)
     p.mount.save_btn.click()
     cfg = config_file.load(tmp / "sim_floor.yaml")
-    assert cfg["MOUNT_OFFSET"] == [-0.1, 0.0] and cfg["MOUNT_YAW"] == 5.0
-    assert "MOUNT_YAW" in p.mount.note.text()
+    assert cfg["mount_offset"] == [-0.1, 0.0] and cfg["mount_yaw"] == 5.0
+    assert "mount_yaw" in p.mount.note.text()
     p.mount.home_btn.click()
     assert where(d) == (pytest.approx([0.0, 0.0]), pytest.approx(0.0))
     assert p.mount.note.text() == ""

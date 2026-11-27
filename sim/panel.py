@@ -12,7 +12,7 @@ with sim-ctl, show up here.
     turn about it (转角, deg). The simulation keeps the base plate on the table: a position past
     the edge stops at it, and turning the arm at the edge moves it in as far as needed (and back
     out when it is turned back). A move that would put the arm into the table is refused.
-    回到原位: back to the scene file's mount. 保存: MOUNT_OFFSET / MOUNT_YAW into the scene file.
+    回到原位: back to the scene file's mount. 保存: mount_offset / mount_yaw into the scene file.
     Like on the real robot only the arm moves (the table, the floor marks and the cubes stay), so
     the positions recorded in configs/control/sim.yaml no longer match once it has moved.
 物块: one cube (picked here, or by double-clicking it in the MuJoCo window, which this then
@@ -192,7 +192,7 @@ class MountSection(Section):
         self.home_btn.setToolTip("回到场景文件里的安装位置")
         self.home_btn.clicked.connect(self._home)
         self.save_btn = QtWidgets.QPushButton("保存到场景文件")
-        self.save_btn.setToolTip("写入场景文件的 MOUNT_OFFSET、MOUNT_YAW，下次 pixi run sim 沿用")
+        self.save_btn.setToolTip("写入场景文件的 mount_offset、mount_yaw，下次 pixi run sim 沿用")
         self.save_btn.clicked.connect(self._save)
         buttons.addWidget(self.home_btn)
         buttons.addWidget(self.save_btn)

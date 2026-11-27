@@ -55,15 +55,15 @@ def main() -> int:
     cam = mujoco.MjvCamera()
     cam.type = mujoco.mjtCamera.mjCAMERA_FREE
     cam.lookat[:], cam.distance, cam.azimuth, cam.elevation = args.lookat, args.distance, args.azimuth, args.elevation
-    c = cfg["CAMERA"]
-    eye = None if args.no_inset else mujoco.Renderer(model, int(c["HEIGHT"]), int(c["WIDTH"]))
+    c = cfg["camera"]
+    eye = None if args.no_inset else mujoco.Renderer(model, int(c["height"]), int(c["width"]))
 
-    place_xy = np.array([control["PLACE_POSITION_X"], control["PLACE_POSITION_Y"]])  # base frame
+    place_xy = np.array([control["place_position_x"], control["place_position_y"]])  # base frame
     tower_xy = scene.base_frame(cfg).to_world(place_xy)  # world; follows the arm's mount (frame below)
-    cubes = [model.body(f"cube_{i}").id for i in range(int(cfg.get("CUBE_POOL", 40)))]
+    cubes = [model.body(f"cube_{i}").id for i in range(int(cfg.get("cube_pool", 40)))]
     fingers = [model.body(n).id for n in scene.FINGER_BODIES]
     finger_q = model.joint("endleft").qposadr[0]
-    closed_q = scene.finger_q_for_gap(cfg["CUBE_SIZE"] + 0.004)  # fingers closer than this: holding a cube
+    closed_q = scene.finger_q_for_gap(cfg["cube_size"] + 0.004)  # fingers closer than this: holding a cube
 
     def tower_count() -> int:
         mid = data.xpos[fingers].mean(0)

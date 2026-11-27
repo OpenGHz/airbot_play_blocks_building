@@ -18,7 +18,7 @@ from airbot_play_rules import (
     tower_footprint,
 )
 
-H = 0.025  # CUBE_HEIGHT
+H = 0.025  # cube_height
 
 
 def test_settle_time_unset_keeps_the_old_waits():
@@ -32,14 +32,14 @@ def test_settle_time_set_applies_to_every_block():
 
 
 def test_release_height_with_the_default_place_height_is_unchanged():
-    # PLACE_POSITION_Z: PICK_GRASP_Z (every shipped config): same heights as the old code, grasp + k * h.
+    # place_position_z: pick_grasp_z (every shipped config): same heights as the old code, grasp + k * h.
     grasp = 0.015
     for k in range(30):
         assert release_z(grasp, k, H) == pytest.approx(grasp + k * H)
 
 
 def test_release_height_follows_place_height_on_every_layer():
-    # The old code used PLACE_POSITION_Z for the first block only and PICK_GRASP_Z after that.
+    # The old code used place_position_z for the first block only and pick_grasp_z after that.
     grasp, place = 0.015, 0.011
     assert release_z(place, 0, H) == pytest.approx(place)
     assert release_z(place, 4, H) == pytest.approx(place + 4 * H)

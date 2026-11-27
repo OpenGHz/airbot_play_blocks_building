@@ -17,6 +17,7 @@ from airbot_play_rules import (
     fingers_beside_top_block,
     first_place_xy,
     floor_and_tower_z,
+    old_key_names,
     place_aligned,
     place_settle_time,
     release_z,
@@ -105,47 +106,49 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         """加载任务的外部配置参数"""
         # 参数加载
         configs = self.process_configs(file_path, log=log)
-        # 参数预处理
-        if configs["PLACE_POSITION_Z"] == "PICK_GRASP_Z":
-            configs["PLACE_POSITION_Z"] = configs["PICK_GRASP_Z"]
-        if configs["PLACE_ROLL"] == "PICK_ROLL":
-            configs["PLACE_ROLL"] = configs["PICK_ROLL"]
-        if configs["PLACE_PITCH"] == "PICK_PITCH":
-            configs["PLACE_PITCH"] = configs["PICK_PITCH"]
-        if configs["PLACE_YAW"] == "PICK_YAW":
-            configs["PLACE_YAW"] = configs["PICK_YAW"]
+        if old_key_names(configs, file_path):
+            raise SystemExit(old_key_names(configs, file_path))
+        # 参数预处理：place_* 可以写成 pick_*，表示和抓取的取值相同（大小写都认，兼容改名前的 PICK_GRASP_Z 等）
+        for place, pick in (
+            ("place_position_z", "pick_grasp_z"),
+            ("place_roll", "pick_roll"),
+            ("place_pitch", "pick_pitch"),
+            ("place_yaw", "pick_yaw"),
+        ):
+            if str(configs[place]).lower() == pick:
+                configs[place] = configs[pick]
 
         # 参数设置
         self._pick_scan_xyz_dict = {
-            0: [configs["PICK_POSITION_X"], configs["PICK_POSITION_Y"], configs["PICK_POSITION_Z"]],
-            1: [configs["PICK_POSITION_X"], configs["PICK_POSITION_Y"], configs["PICK_POSITION_Z"]],
+            0: [configs["pick_position_x"], configs["pick_position_y"], configs["pick_position_z"]],
+            1: [configs["pick_position_x"], configs["pick_position_y"], configs["pick_position_z"]],
         }
-        self._pick_rpy = (configs["PICK_ROLL"], configs["PICK_PITCH"], configs["PICK_YAW"])
-        self._pick_base_z = configs["PICK_GRASP_Z"]
-        self._place_xy = (configs["PLACE_POSITION_X"], configs["PLACE_POSITION_Y"])
-        self._place_rpy = (configs["PLACE_ROLL"], configs["PLACE_PITCH"], configs["PLACE_YAW"])
-        self._place_z0 = configs["PLACE_POSITION_Z"]  # 第一层的松开高度，第k层为 _place_z0 + k*CUBE_HEIGHT
+        self._pick_rpy = (configs["pick_roll"], configs["pick_pitch"], configs["pick_yaw"])
+        self._pick_base_z = configs["pick_grasp_z"]
+        self._place_xy = (configs["place_position_x"], configs["place_position_y"])
+        self._place_rpy = (configs["place_roll"], configs["place_pitch"], configs["place_yaw"])
+        self._place_z0 = configs["place_position_z"]  # 第一层的松开高度，第k层为 _place_z0 + k*cube_height
         self._place_base_z = self._place_z0  # 当前层的松开高度
-        self._cube_height = configs["CUBE_HEIGHT"]
-        self._pick_y = configs["PICK_POSITION_Y"]
+        self._cube_height = configs["cube_height"]
+        self._pick_y = configs["pick_position_y"]
         # 转移路径（规划场景）的可选项
-        self._transit_z_min = configs.get("TRANSIT_Z_MIN")  # 抓起后横移时末端的最低高度；不设时与原来一样
-        self._retreat_y = configs.get("PLACE_RETREAT_Y", 0.0)  # 松开上升后沿y侧移的距离（自动朝抓取区一侧）；0为不侧移
+        self._transit_z_min = configs.get("transit_z_min")  # 抓起后横移时末端的最低高度；不设时与原来一样
+        self._retreat_y = configs.get("place_retreat_y", 0.0)  # 松开上升后沿y侧移的距离（自动朝抓取区一侧）；0为不侧移
         # 到塔上方后停稳的时间（第1块松开前、之后开始视觉调节前）；不写时和原来一样（airbot_play_rules.place_settle_time）
-        self._place_settle = configs.get("PLACE_SETTLE_TIME")
+        self._place_settle = configs.get("place_settle_time")
         # 跟踪范围限位：视觉跟踪的目标xy超出矩形时不执行这一步，防止锁定抓取区外 / 塔上的同色物块
-        # 半边长不写时该阶段不限位；连续 OUT_OF_AREA_FRAMES 帧超出时放弃（见 airbot_play_rules.TrackLimit）
-        frames = configs.get("OUT_OF_AREA_FRAMES", 10)
+        # 半边长不写时该阶段不限位；连续 out_of_area_frames 帧超出时放弃（见 airbot_play_rules.TrackLimit）
+        frames = configs.get("out_of_area_frames", 10)
         self._track = {
             "pick": TrackLimit(
-                configs.get("PICK_AREA_CENTER", (configs["PICK_POSITION_X"], configs["PICK_POSITION_Y"])),
-                configs.get("PICK_AREA_HALF_SIZE"),
+                configs.get("pick_area_center", (configs["pick_position_x"], configs["pick_position_y"])),
+                configs.get("pick_area_half_size"),
                 frames,
             ),
-            "place": TrackLimit(self._place_xy, configs.get("PLACE_TRACK_HALF_SIZE"), frames),
+            "place": TrackLimit(self._place_xy, configs.get("place_track_half_size"), frames),
         }
         # 添加预置关节角位姿
-        if configs["PICK_JOINT"] == "AUTO":
+        if configs["pick_joint"] == "AUTO":
             self.preset_pose["PickJoint"] = (0,) * self.joints_num
             error_max = 10
             error_cnt = 0
@@ -167,11 +170,11 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             #     print(self.preset_pose['PickJoint'])
             # print("negative times:", neg), exit(0)  # 经判断末端为负的次数总是少于为正的
         else:
-            if max(np.abs(configs["PICK_JOINT"])) > 2 * np.pi:  # 自动检测degree并转换
-                self.preset_pose["PickJoint"] = (np.array(configs["PICK_JOINT"]) * np.pi / 180).tolist()
+            if max(np.abs(configs["pick_joint"])) > 2 * np.pi:  # 自动检测degree并转换
+                self.preset_pose["PickJoint"] = (np.array(configs["pick_joint"]) * np.pi / 180).tolist()
             else:
-                self.preset_pose["PickJoint"] = configs["PICK_JOINT"]
-        self._gap_place = configs.get("GAP_PLACE", 0.003)
+                self.preset_pose["PickJoint"] = configs["pick_joint"]
+        self._gap_place = configs.get("gap_place", 0.003)
         self._gap_disget = self._gap_place  # 检测物块搭建的实际高度时的位置裕量
         rospy.loginfo(f"gap_place: {self._gap_place}")
 
@@ -856,7 +859,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
             self._follow_event.clear()
 
     def _on_out_of_area(self):
-        """连续OUT_OF_AREA_FRAMES帧超出跟踪范围"""
+        """连续out_of_area_frames帧超出跟踪范围"""
         color = f"第 {self.pick_place_0_1 + 1} 种颜色"
         if self._pick_place_stage == "pick":
             self._raise_fault(
@@ -1144,7 +1147,7 @@ class AIRbotPlayPickPlace(RoboticArmAgent):
         # 闭环时到放置点上方，偏差由视觉调节补回；开环没有调节，直接到第一块的正上方（和规划场景时相同）
         xy = self._first_xy if place_mode == 1 else self._place_xy
         # 停稳：原来在测高位置等 1 s（测距时 2 s）、调节位置等 2 s；没有测距传感器时两者是同一点，
-        # 设了 PLACE_SETTLE_TIME 时只在调节位置等这么久
+        # 设了 place_settle_time 时只在调节位置等这么久
         detect_sleep = 2 if use_tof else (1 if self._place_settle is None else 0)
         adjust_sleep = 2 if self._place_settle is None else self._place_settle
         if use_tof:
@@ -1386,7 +1389,7 @@ if __name__ == "__main__":
     settle = airbot_player._place_settle
     rospy.loginfo(
         "到塔上方后停稳："
-        + ("和原来一样，第1块松开前 1 s，之后开始调节前 3 s" if settle is None else f"{settle} s（PLACE_SETTLE_TIME）")
+        + ("和原来一样，第1块松开前 1 s，之后开始调节前 3 s" if settle is None else f"{settle} s（place_settle_time）")
     )
     # 传入args.control_param参数，则进行参数配置阻塞以及自动夹取控制
     print("args.control_param=", control_param)

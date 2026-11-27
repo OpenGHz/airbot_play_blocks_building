@@ -4,13 +4,13 @@ What the manual's `vision -t pi0` / `-t pl0` steps find by hand, computed in the
 simulation with the detection code of Best_Contour.py (std_vision colour filter +
 Contour.NFC_F):
 
-  EXPECT_X, EXPECT_PICK_REF  centre of a cube right under the gripper at the pick scan pose
-  EXPECT_PLACE_REF           upper edge in the image of the tower's top cube (the topmost
+  expect_x, expect_pick_ref  centre of a cube right under the gripper at the pick scan pose
+  expect_place_ref           upper edge in the image of the tower's top cube (the topmost
                              edge in the image; physically the cube's lower edge) with the next cube held
-                             GAP_PLACE above it (the adjust pose)
-  EXPECT_HELD_REF            upper edge in the image of the held cube, centred in the gripper,
+                             gap_place above it (the adjust pose)
+  expect_held_ref            upper edge in the image of the held cube, centred in the gripper,
                              at the adjust pose (`pixi run vision --held-cube`)
-  HELD_SCALE                 pixels the tower's top cube moves in image y per pixel the held cube
+  held_scale                 pixels the tower's top cube moves in image y per pixel the held cube
                              moves, for the same shift along the finger gap (base x here)
 
 --apply writes them into the vision config.
@@ -39,13 +39,13 @@ class Cam:
         self.m, self.d, _ = scene.build_physics(cfg)
         self.frame = scene.base_frame(cfg)
         self.arm = kin.Arm(self.m, mujoco.MjData(self.m), self.frame)
-        c = cfg["CAMERA"]
-        self.r = mujoco.Renderer(self.m, int(c["HEIGHT"]), int(c["WIDTH"]))
+        c = cfg["camera"]
+        self.r = mujoco.Renderer(self.m, int(c["height"]), int(c["width"]))
         self.cubes = [
-            self.m.joint(self.m.body(f"cube_{i}").jntadr[0]).qposadr[0] for i in range(int(cfg.get("CUBE_POOL", 40)))
+            self.m.joint(self.m.body(f"cube_{i}").jntadr[0]).qposadr[0] for i in range(int(cfg.get("cube_pool", 40)))
         ]
         self.colors = scene.pool_colors(cfg)
-        self.s = cfg["CUBE_SIZE"] / 2
+        self.s = cfg["cube_size"] / 2
 
     def cube(self, color, k):
         """Index of the k-th pool cube of a colour."""
@@ -72,9 +72,9 @@ class Cam:
 
 
 def place_hsv(vision: dict) -> dict:
-    """Place-stage thresholds as Best_Contour.py uses them (HSV*_P when USE_PLACE_HSV is "True")."""
-    p = "_P" if str(vision.get("USE_PLACE_HSV", "False")).lower() == "true" else ""
-    return {1: (vision[f"HSV1_L{p}"], vision[f"HSV1_H{p}"]), 2: (vision[f"HSV2_L{p}"], vision[f"HSV2_H{p}"])}
+    """Place-stage thresholds as Best_Contour.py uses them (hsv*_p when use_place_hsv is "True")."""
+    p = "_p" if str(vision.get("use_place_hsv", "False")).lower() == "true" else ""
+    return {1: (vision[f"hsv1_l{p}"], vision[f"hsv1_h{p}"]), 2: (vision[f"hsv2_l{p}"], vision[f"hsv2_h{p}"])}
 
 
 def detect(bgr, hsv_l, hsv_h, area, ratio, ref, crop=False, crop_x=None):
@@ -104,28 +104,28 @@ def main():
     control = config_file.load(args.control)
     vision = config_file.load(args.vision)
     cam = Cam(cfg)
-    names = list(cfg["CUBE_COLORS"])
-    hsv = {names[0]: (vision["HSV1_L"], vision["HSV1_H"]), names[1]: (vision["HSV2_L"], vision["HSV2_H"])}
+    names = list(cfg["cube_colors"])
+    hsv = {names[0]: (vision["hsv1_l"], vision["hsv1_h"]), names[1]: (vision["hsv2_l"], vision["hsv2_h"])}
     ph = place_hsv(vision)
     hsv_place = {names[0]: ph[1], names[1]: ph[2]}
-    crop_x = vision.get("PLACE_CROP_X")
-    width = int(cfg["CAMERA"]["WIDTH"])
-    ref0 = (width / 2 if vision["EXPECT_X"] == "AUTO" else vision["EXPECT_X"], vision["EXPECT_PICK_REF"])
+    crop_x = vision.get("place_crop_x")
+    width = int(cfg["camera"]["width"])
+    ref0 = (width / 2 if vision["expect_x"] == "AUTO" else vision["expect_x"], vision["expect_pick_ref"])
     open_q = scene.finger_q_for_gap(0.07)
-    hold_q = scene.finger_q_for_gap(cfg["CUBE_SIZE"]) + 0.0005
+    hold_q = scene.finger_q_for_gap(cfg["cube_size"]) + 0.0005
 
     # Pick: one cube right under the gripper at the scan pose, for both colours.
-    px, py = control["PICK_POSITION_X"], control["PICK_POSITION_Y"]
-    z_floor = control["PICK_GRASP_Z"] - 0.0025 - cam.s  # the grasp point is ~2.5 mm above the cube centre
+    px, py = control["pick_position_x"], control["pick_position_y"]
+    z_floor = control["pick_grasp_z"] - 0.0025 - cam.s  # the grasp point is ~2.5 mm above the cube centre
     picks = []
     for color in names:
         mujoco.mj_resetData(cam.m, cam.d)
         cam.put(cam.cube(color, 0), (px, py, z_floor + cam.s))
-        cam.pose([px, py, control["PICK_POSITION_Z"]], open_q)
+        cam.pose([px, py, control["pick_position_z"]], open_q)
         img = cam.render()
         if args.save:
             cv2.imwrite(f"{args.save}_pick_{color}.png", img)
-        res = detect(img, *hsv[color], vision["AREA_LIMIT_PICK"], 3.0, ref0)
+        res = detect(img, *hsv[color], vision["area_limit_pick"], 3.0, ref0)
         if res is None:
             raise SystemExit(f"pick: the {color} cube under the gripper was not detected")
         picks.append(res["center"])
@@ -135,9 +135,9 @@ def main():
     expect_x = float(np.mean([c[0] for c in picks]))
     pick_ref = float(np.mean([c[1] for c in picks]))
 
-    # Place: tower of k cubes at the place spot; the next cube held GAP_PLACE above it.
-    tx, ty = control["PLACE_POSITION_X"], control["PLACE_POSITION_Y"]
-    h, gap = control["CUBE_HEIGHT"], control.get("GAP_PLACE", 0.003)
+    # Place: tower of k cubes at the place spot; the next cube held gap_place above it.
+    tx, ty = control["place_position_x"], control["place_position_y"]
+    h, gap = control["cube_height"], control.get("gap_place", 0.003)
     edges = []
     areas = []
     for k in (1, 2, 5, 10, 15, 20, 24):
@@ -145,7 +145,7 @@ def main():
         for j in range(k):
             cam.put(cam.cube(names[j % 2], j // 2), (tx, ty, z_floor + cam.s + j * h))
         held_color = names[k % 2]
-        z_grasp = control["PICK_GRASP_Z"] + k * h + gap  # adjust pose
+        z_grasp = control["pick_grasp_z"] + k * h + gap  # adjust pose
         cam.put(cam.cube(held_color, k // 2), (tx, ty, z_grasp - 0.0025))
         try:
             cam.pose([tx, ty, z_grasp], hold_q)
@@ -156,7 +156,7 @@ def main():
             cv2.imwrite(f"{args.save}_place_{k}.png", img)
         top_color = names[(k - 1) % 2]
         res = detect(
-            img, *hsv_place[top_color], vision["AREA_LIMIT_PLACE"], 5.5, (expect_x, pick_ref), crop=True, crop_x=crop_x
+            img, *hsv_place[top_color], vision["area_limit_place"], 5.5, (expect_x, pick_ref), crop=True, crop_x=crop_x
         )
         if res is None:
             print(f"place on {k:2d} blocks: top cube not detected")
@@ -168,7 +168,7 @@ def main():
         )
     place_ref = float(np.median(edges))
     print(
-        f"place-stage tower-top box area {min(areas):.0f} ~ {max(areas):.0f} (AREA_LIMIT_PLACE {vision['AREA_LIMIT_PLACE']})"
+        f"place-stage tower-top box area {min(areas):.0f} ~ {max(areas):.0f} (area_limit_place {vision['area_limit_place']})"
     )
 
     # Held cube (--held-cube): where it is with no grasp offset, and how far the top cube has to move
@@ -179,14 +179,14 @@ def main():
         for j in range(k):
             d = top_d if j == k - 1 else (0.0, 0.0)
             cam.put(cam.cube(names[j % 2], j // 2), (tx + d[0], ty + d[1], z_floor + cam.s + j * h))
-        z_grasp = control["PICK_GRASP_Z"] + k * h + gap
+        z_grasp = control["pick_grasp_z"] + k * h + gap
         cam.put(cam.cube(names[k % 2], k // 2), (tx + held_d[0], ty + held_d[1], z_grasp - 0.0025))
         cam.pose([tx, ty, z_grasp], hold_q)
         img = cam.render()
         top = detect(
             img,
             *hsv_place[names[(k - 1) % 2]],
-            vision["AREA_LIMIT_PLACE"],
+            vision["area_limit_place"],
             5.5,
             (expect_x, pick_ref),
             crop=True,
@@ -196,7 +196,7 @@ def main():
         if crop_x is not None:
             held_bin[:, : max(0, int(crop_x[0]))] = 0
             held_bin[:, int(crop_x[1]) :] = 0
-        held = find_held_cube(held_bin, vision["AREA_LIMIT_PLACE"][0])
+        held = find_held_cube(held_bin, vision["area_limit_place"][0])
         if top is None or held is None:
             raise SystemExit(f"held cube: tower of {k}, {'top' if top is None else 'held'} cube not detected")
         return (top["center"][0], top["upper_edge"]), (held["x"], held["edge"])
@@ -214,19 +214,19 @@ def main():
     print(f"along the finger gap: top cube {top_px_mm:+.2f} px/mm, held cube {held_px_mm:+.2f} px/mm in image y")
     print(f"held cube centred in the gripper: upper edge {held0[1]:.1f}")
 
-    print(f"\nEXPECT_X {expect_x:.1f}  EXPECT_PICK_REF {pick_ref:.1f}  EXPECT_PLACE_REF {place_ref:.1f}")
-    print(f"EXPECT_HELD_REF {held0[1]:.1f}  HELD_SCALE {scale}")
+    print(f"\nexpect_x {expect_x:.1f}  expect_pick_ref {pick_ref:.1f}  expect_place_ref {place_ref:.1f}")
+    print(f"expect_held_ref {held0[1]:.1f}  held_scale {scale}")
     if args.apply:
         config_file.set_keys(
             args.vision,
             {
-                "EXPECT_X": round(expect_x, 1),
-                "EXPECT_PICK_REF": round(pick_ref, 1),
-                "EXPECT_PLACE_REF": round(place_ref, 1),
-                "EXPECT_HELD_REF": round(held0[1], 1),
-                "HELD_SCALE": scale,
+                "expect_x": round(expect_x, 1),
+                "expect_pick_ref": round(pick_ref, 1),
+                "expect_place_ref": round(place_ref, 1),
+                "expect_held_ref": round(held0[1], 1),
+                "held_scale": scale,
             },
-            after="EXPECT_X",
+            after="expect_x",
         )
         print(f"written to {args.vision}")
 

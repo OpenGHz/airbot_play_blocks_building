@@ -31,7 +31,7 @@ def test_edge_target_moves_with_the_held_cube_by_the_scale():
 @pytest.mark.parametrize("name", ["real", "sim"])
 def test_held_cube_keys_come_together(name):
     v = config_file.load(REPO / f"configs/vision/{name}.yaml")
-    keys = [k in v for k in ("EXPECT_HELD_REF", "HELD_SCALE")]
+    keys = [k in v for k in ("expect_held_ref", "held_scale")]
     assert all(keys) or not any(keys)
     if all(keys):
-        assert 0 < v["HELD_SCALE"] < 2
+        assert 0 < v["held_scale"] < 2

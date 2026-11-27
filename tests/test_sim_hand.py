@@ -60,7 +60,7 @@ def test_carry_a_cube_and_let_go(world):
     settle(w)
     p = w.cube_pos(i)
     assert np.allclose(p[:2], target[:2], atol=0.003)
-    assert p[2] == pytest.approx(w.cfg["CUBE_SIZE"] / 2, abs=0.001), "set down on the floor"
+    assert p[2] == pytest.approx(w.cfg["cube_size"] / 2, abs=0.001), "set down on the floor"
     up = w.data.xmat[body(w, f"cube_{i}")].reshape(3, 3)[:, 2]
     assert up[2] > 0.999, "upright"
 
@@ -74,7 +74,7 @@ def test_let_go_above_another_cube_stacks_it(world):
     sel = drag(hand, w, f"cube_{a}", TRANSLATE, (pa, q), [(pa + [0, 0, 0.06], q), (above_b, q)])
     hand.update(sel, 0, above_b, q)
     settle(w)
-    assert w.cube_pos(a)[2] == pytest.approx(pb[2] + w.cfg["CUBE_SIZE"], abs=0.002)
+    assert w.cube_pos(a)[2] == pytest.approx(pb[2] + w.cfg["cube_size"], abs=0.002)
     assert np.allclose(w.cube_pos(a)[:2], pb[:2], atol=0.004)
 
 
@@ -148,12 +148,12 @@ def test_mount_refuses_to_put_the_arm_into_the_table(world):
 
 
 def test_mount_offset_in_the_scene_file(world):
-    cfg = dict(scene.load_config("floor"), MOUNT_OFFSET=[-0.1, 0.05])
+    cfg = dict(scene.load_config("floor"), mount_offset=[-0.1, 0.05])
     w = World(cfg)
     assert np.allclose(w.data.xpos[w.root][:2], [-0.1, 0.05])
     assert np.allclose(scene.base_offset(cfg)[:2], [-0.1, 0.05])
     assert np.allclose(scene.scene_offset(cfg)[:2], [0.0, 0.0])
-    assert "MOUNT_OFFSET" not in scene.without_mount_offset(cfg)
+    assert "mount_offset" not in scene.without_mount_offset(cfg)
 
 
 def plate_corners_world(w):
@@ -226,11 +226,11 @@ def test_mount_limits_keep_the_turned_plate_on_the_table(world):
 
 
 def test_mount_yaw_in_the_scene_file():
-    cfg = dict(scene.load_config("floor"), MOUNT_OFFSET=[-0.1, 0.05], MOUNT_YAW=15.0)
+    cfg = dict(scene.load_config("floor"), mount_offset=[-0.1, 0.05], mount_yaw=15.0)
     w = World(cfg)
     assert np.allclose(w.data.xquat[w.root], yaw_quat(math.radians(15)), atol=1e-9)
     assert w.ctl("arm_where", {})["yaw"] == pytest.approx(15.0)
-    assert not {"MOUNT_OFFSET", "MOUNT_YAW"} & set(scene.without_mount_offset(cfg))
+    assert not {"mount_offset", "mount_yaw"} & set(scene.without_mount_offset(cfg))
     # A copy of the model (the wrist camera process, sim-record) put where the simulation says.
     model, data, _ = scene.build_physics(scene.load_config("floor"))
     state = w.handle("get_qpos", {})
@@ -243,7 +243,7 @@ def test_mount_yaw_in_the_scene_file():
 
 def test_set_a_cube_down(world):
     w = world
-    s = w.cfg["CUBE_SIZE"] / 2
+    s = w.cfg["cube_size"] / 2
     floor_z = w.to_base([0.0, 0.0, 0.0])[2]
     a, b = w.pick.batch[:2]
     assert w.set_cube(a, (0.36, -0.06), math.radians(10)) == ""

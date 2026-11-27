@@ -11,7 +11,13 @@ import yaml
 
 def load(path) -> dict:
     with open(path) as f:
-        return yaml.safe_load(f) or {}
+        cfg = yaml.safe_load(f) or {}
+    old = [k for k in cfg if isinstance(k, str) and k.isupper()]
+    if old:  # written before the key names became lower case
+        raise ValueError(
+            f"{path}：参数名已经改成小写（{old[0]} 改为 {old[0].lower()}），这个文件里还有 {len(old)} 个大写的参数名"
+        )
+    return cfg
 
 
 def set_keys(path, values: dict, after: str | None = None) -> None:

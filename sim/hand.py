@@ -43,7 +43,7 @@ class Hand:
         m = world.model
         self.cube_of_body = {m.body(f"cube_{i}").id: i for i in range(len(world.cubes))}
         self.base_bodies = {m.body("base_link").id, m.body("link1").id}
-        self.s = world.cfg["CUBE_SIZE"] / 2
+        self.s = world.cfg["cube_size"] / 2
         self.drag = None  # what the current Ctrl-drag started from
         self.held = None  # [cube, centre (world), yaw] while a cube is carried
         self.select = -1

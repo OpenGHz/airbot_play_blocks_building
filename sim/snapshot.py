@@ -21,9 +21,9 @@ OUT = scene.REPO / "runs/sim"
 def build_with_props(cfg, h_table, tower_blocks: int, held: bool):
     """Scene plus a static tower of `tower_blocks` cubes and an optional cube in the gripper."""
     spec = scene.build_spec(cfg, h_table)
-    s = cfg["CUBE_SIZE"] / 2
-    colors = list(cfg["CUBE_COLORS"].values())
-    tx, ty = cfg["TOWER_XY"]
+    s = cfg["cube_size"] / 2
+    colors = list(cfg["cube_colors"].values())
+    tx, ty = cfg["tower_xy"]
     for i in range(tower_blocks):
         spec.worldbody.add_geom(
             name=f"tower_{i}",
@@ -64,8 +64,8 @@ def views(cfg, H):
     phi: direction out of the table across the mounting edge. Looking along phi + 90 is
     looking along the edge; along phi + 180 is looking from outside back at the table."""
     phi = scene.edge_angle(cfg)
-    tx, ty = cfg["TOWER_XY"]
-    px, py = cfg["PICK_XY"]
+    tx, ty = cfg["tower_xy"]
+    px, py = cfg["pick_xy"]
     floor = scene.pick_on_floor(cfg)
     mid = [(tx + px) / 2, (ty + py) / 2]
     return {
@@ -101,10 +101,10 @@ def main():
     control = named.load_control(args.control)
     res = named.compute(cfg, control)
     H, n = res["table_height"], res["layers"]
-    tx, ty = cfg["TOWER_XY"]
+    tx, ty = cfg["tower_xy"]
     OUT.mkdir(parents=True, exist_ok=True)
     W, Hh = 800, 600
-    cam = cfg["CAMERA"]
+    cam = cfg["camera"]
 
     v = views(cfg, H)
     floor = scene.pick_on_floor(cfg)
@@ -113,10 +113,10 @@ def main():
     m, d = pose_scene(cfg, res, "pick", 0)
     a = label(
         render(m, d, v["overview"], W, Hh),
-        f"{cfg['NAME']} scene, {cfg.get('MOUNT', 'side')} mount: table {H:.3f} m, "
+        f"{cfg['name']} scene, {cfg.get('mount', 'side')} mount: table {H:.3f} m, "
         f"pick area on the {'floor' if floor else 'table'}",
     )
-    b = label(render(m, d, "eye", cam["WIDTH"], cam["HEIGHT"]), "wrist camera at pick scan pose (640x480)")
+    b = label(render(m, d, "eye", cam["width"], cam["height"]), "wrist camera at pick scan pose (640x480)")
     b = cv2.resize(b, (W, Hh))
 
     # 2. First block on the floor.
@@ -127,11 +127,11 @@ def main():
     # 3. Highest block at this table height.
     m, d = pose_scene(cfg, res, "top", n - 1)
     f = label(render(m, d, v["top"], W, Hh), f"block {n} on top: {n} blocks without lifting the table")
-    g = label(render(m, d, "eye", cam["WIDTH"], cam["HEIGHT"]), f"wrist camera placing block {n}")
+    g = label(render(m, d, "eye", cam["width"], cam["height"]), f"wrist camera placing block {n}")
     g = cv2.resize(g, (W, Hh))
 
     grid = np.vstack([np.hstack([a, b]), np.hstack([c, e]), np.hstack([f, g])])
-    path = OUT / f"scene_{cfg['NAME']}.png"
+    path = OUT / f"scene_{cfg['name']}.png"
     cv2.imwrite(str(path), grid)
     print(
         f"table height {H:.3f} m, tower at ({tx}, {ty}), first block released at z = {res['z_first']:+.3f}, "

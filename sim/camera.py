@@ -59,8 +59,8 @@ def main() -> int:
     from sensor_msgs.msg import CameraInfo, Image
 
     cfg = scene.load_config(args.scene)
-    cam = cfg["CAMERA"]
-    width, height, fps = int(cam["WIDTH"]), int(cam["HEIGHT"]), float(cam.get("FPS", 30))
+    cam = cfg["camera"]
+    width, height, fps = int(cam["width"]), int(cam["height"]), float(cam.get("fps", 30))
     model, data, _ = scene.build_physics(cfg)
     renderer = mujoco.Renderer(model, height, width)
     cam_id = model.camera("eye").id
@@ -75,7 +75,7 @@ def main() -> int:
     rospy.init_node("sim_wrist_camera", anonymous=False, disable_signals=True)
     pub = rospy.Publisher("/camera/color/image_raw", Image, queue_size=1)
     info_pub = rospy.Publisher("/camera/color/camera_info", CameraInfo, queue_size=1, latch=True)
-    info = camera_info(width, height, cam["FOVY"])
+    info = camera_info(width, height, cam["fovy"])
     print(f"[sim camera] 腕部相机 {width}x{height}@{fps:.0f}Hz -> /camera/color/image_raw", flush=True)
 
     msg = Image()

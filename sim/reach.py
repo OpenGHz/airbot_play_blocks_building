@@ -4,10 +4,10 @@ Reach along a vertical line: the gripper points down and moves along the line
 above a spot, the way it lowers a block onto the tower or onto a cube to grasp.
 A height counts as reachable only if the IK solution stays continuous with its
 neighbour (so the straight-line move exists), the joints stay
-JOINT_LIMIT_MARGIN_DEG inside their limits, and every link, the fingers and the
+joint_limit_margin_deg inside their limits, and every link, the fingers and the
 camera (the camera_stand mesh on link6) keep a clearance from the table top, columns and feet.
 
-The tower is on the floor, so block 1 is released at PICK_GRASP_Z - H (base
+The tower is on the floor, so block 1 is released at pick_grasp_z - H (base
 frame, H = table height). The highest table that still reaches the floor is the
 best start: the tower can then grow the most before the arm runs out of reach.
 
@@ -16,7 +16,7 @@ Scenes:
   floor  pick area on the floor (configs/scene/sim_floor.yaml). Every pick cube must
          be reachable on the floor too, and the table cannot be raised once building
          starts, because the pick area would go out of reach.
-MOUNT (scene file or --mount): "side" = the arm's side is flush with the table edge,
+mount (scene file or --mount): "side" = the arm's side is flush with the table edge,
 "front" = the arm faces out over the edge.
 
 Candidate spots lie on a polar grid around the base (r = 0.25 / 0.30 / 0.35 m,
@@ -50,7 +50,7 @@ TOWER_RADII, PICK_RADII, BEARING_STEP = (0.25, 0.30, 0.35), (0.25, 0.30), 15
 TOWER_OFF_TABLE = 0.04  # tower centre at least this far outside the table top, m
 CUBE_CLEARANCE = 0.03  # pick cubes this far inside (table) or outside (floor) the table edge, m
 MIN_SEPARATION = 0.15  # pick-area centre to tower, m (quick pre-filter; the tower checks decide)
-TRACK_MARGIN = 0.03  # pick tracking range beyond the cubes, m (PICK_AREA_HALF_SIZE, plan §4.5)
+TRACK_MARGIN = 0.03  # pick tracking range beyond the cubes, m (pick_area_half_size, plan §4.5)
 CARRY_TOWER_GAP = 0.005  # arm to the tower built so far while carrying, m (fingertips end ~1 cm above it)
 Z_ANCHOR = 0.05  # base-frame height where every vertical-line sweep starts
 STARTS = 8  # IK branches tried per spot
@@ -132,12 +132,12 @@ def rival(arm, q, targets, others, cfg, vision, stage, margin_px=40):
     """Would Best_Contour.py follow the wrong block from arm pose q?
 
     It keeps contours of one colour within AREA_LIMIT_<STAGE>, then follows the one nearest to
-    (EXPECT_X, EXPECT_PICK_REF). targets/others: centres (base frame) of blocks of that colour.
+    (expect_x, expect_pick_ref). targets/others: centres (base frame) of blocks of that colour.
     Returns a description if some other block could be nearer than the farthest target."""
     pos, rot = arm.camera(q)
-    w, h = cfg["CAMERA"]["WIDTH"], cfg["CAMERA"]["HEIGHT"]
-    f = (h / 2) / math.tan(math.radians(cfg["CAMERA"]["FOVY"]) / 2)
-    ref = (w / 2 if vision["EXPECT_X"] == "AUTO" else vision["EXPECT_X"], vision["EXPECT_PICK_REF"])
+    w, h = cfg["camera"]["width"], cfg["camera"]["height"]
+    f = (h / 2) / math.tan(math.radians(cfg["camera"]["fovy"]) / 2)
+    ref = (w / 2 if vision["expect_x"] == "AUTO" else vision["expect_x"], vision["expect_pick_ref"])
     lo, hi = vision[f"AREA_LIMIT_{stage.upper()}"]
 
     def dist(p):
@@ -145,7 +145,7 @@ def rival(arm, q, targets, others, cfg, vision, stage, margin_px=40):
         if -v[2] < 0.01:
             return None
         u, r = w / 2 + f * v[0] / -v[2], h / 2 - f * v[1] / -v[2]
-        face = (f * cfg["CUBE_SIZE"] / -v[2]) ** 2  # one face; up to about twice that with side faces
+        face = (f * cfg["cube_size"] / -v[2]) ** 2  # one face; up to about twice that with side faces
         if not (0 <= u < w and 0 <= r < h) or 2 * face < lo or face > hi:
             return None
         if stage == "place" and r >= 423:  # Best_Contour.py crops the place image at row 423
@@ -183,7 +183,7 @@ class Planner:
     def __init__(self, cfg, control, vision, clearance, margin):
         self.cfg, self.control, self.clear, self.margin = cfg, control, clearance, margin
         self.floor_pick = scene.pick_on_floor(cfg)
-        self.h_lo, self.h_hi = cfg["TABLE_HEIGHT_RANGE"]
+        self.h_lo, self.h_hi = cfg["table_height_range"]
         # Floor far below: only the table and legs matter, plus a box standing in for the tower
         # (moved and resized per check, never collides).
         spec = scene.build_spec(cfg, self.h_hi)
@@ -198,9 +198,9 @@ class Planner:
         model = spec.compile()
         self.arm = kin.Arm(model, mujoco.MjData(model), scene.base_offset(cfg, self.h_hi), kin.limit_margin(cfg))
         self.tower_geom = model.geom("tower_obstacle").id
-        self.h, self.gap = control["CUBE_HEIGHT"], control.get("GAP_PLACE", 0.003)
-        self.grasp = control["PICK_GRASP_Z"]  # above the surface the cube stands on
-        self.hold = scene.finger_q_for_gap(cfg["CUBE_SIZE"])
+        self.h, self.gap = control["cube_height"], control.get("gap_place", 0.003)
+        self.grasp = control["pick_grasp_z"]  # above the surface the cube stands on
+        self.hold = scene.finger_q_for_gap(cfg["cube_size"])
         self.vision = vision
         self._ext = {}
 
@@ -215,7 +215,7 @@ class Planner:
         return [xy for xy in self.grid(TOWER_RADII) if scene.outside_table(self.cfg, *xy) >= TOWER_OFF_TABLE]
 
     def picks(self):
-        s = self.cfg["CUBE_SIZE"] / 2 + CUBE_CLEARANCE
+        s = self.cfg["cube_size"] / 2 + CUBE_CLEARANCE
         out = []
         for xy in self.grid(PICK_RADII):
             d = [scene.outside_table(self.cfg, x, y) for x, y, _ in scene.pick_cubes(self.cfg, xy)]
@@ -225,7 +225,7 @@ class Planner:
 
     def set_tower(self, xy, H, n):
         """Put the tower obstacle at xy: n blocks standing on the floor of a table at height H."""
-        m, g, s = self.arm.m, self.tower_geom, self.cfg["CUBE_SIZE"] / 2
+        m, g, s = self.arm.m, self.tower_geom, self.cfg["cube_size"] / 2
         half = max(n, 1) * s
         m.geom_pos[g] = [xy[0], xy[1], self.h_hi - H + half]  # world z; the base is at h_hi here
         m.geom_size[g] = [s, s, half]
@@ -281,14 +281,14 @@ class Planner:
         arm, H, n, h = self.arm, c["H"], c["n"], self.h
         tx, ty = c["tower"]
         lift = H if self.floor_pick else 0.0
-        z_scan = self.control["PICK_POSITION_Z"] - lift
+        z_scan = self.control["pick_position_z"] - lift
         z_grasp, z_first = self.grasp - lift, self.grasp - H
-        s = self.cfg["CUBE_SIZE"] / 2
+        s = self.cfg["cube_size"] / 2
         tower_cubes = [(tx, ty, -H + s + 2 * s * k) for k in range(n)]
         pick_cubes = [(x, y, -lift + s) for x, y in self.cube_xys(c["pick"])]
         t_ext, p_ext = self.ext(c["tower"]), self.ext(c["pick"])
         colour = [col for _, _, col in scene.pick_cubes(self.cfg, c["pick"])]
-        order = list(self.cfg["CUBE_COLORS"])  # tower block k has colour order[k % 2]
+        order = list(self.cfg["cube_colors"])  # tower block k has colour order[k % 2]
         for x, y, _ in pick_cubes:
             if branch_q(arm, self.ext((x, y)), z_scan) is None:
                 return f"pick scan above ({x:.2f}, {y:.2f}) unreachable"
@@ -358,8 +358,8 @@ class Planner:
 
 
 def set_keys(path, values):
-    """Rewrite single keys in place so the file keeps its layout and comments; add missing ones after NAME."""
-    config_file.set_keys(path, values, after="NAME")
+    """Rewrite single keys in place so the file keeps its layout and comments; add missing ones after name."""
+    config_file.set_keys(path, values, after="name")
 
 
 def run(cfg, control, vision, clearance=0.01, margin=0.01, verbose=False, log=print):
@@ -369,7 +369,7 @@ def run(cfg, control, vision, clearance=0.01, margin=0.01, verbose=False, log=pr
     pl = Planner(cfg, control, vision, clearance, margin)
     towers, picks = pl.towers(), pl.picks()
     log(
-        f"scene '{cfg['NAME']}', MOUNT {cfg.get('MOUNT', 'side')}: pick area on the "
+        f"scene '{cfg['name']}', mount {cfg.get('mount', 'side')}: pick area on the "
         f"{'floor' if pl.floor_pick else 'table top'}, tower on the floor; "
         f"{len(towers)} tower spots x {len(picks)} pick spots"
     )
@@ -413,7 +413,7 @@ def run(cfg, control, vision, clearance=0.01, margin=0.01, verbose=False, log=pr
         return None, rejected, pl
 
     # Final check in the full scene at that height (the table feet are on the floor now).
-    cfg = dict(cfg, TOWER_XY=list(best["tower"]), PICK_XY=list(best["pick"]))
+    cfg = dict(cfg, tower_xy=list(best["tower"]), pick_xy=list(best["pick"]))
     H = best["H"]
     while True:
         try:
@@ -429,7 +429,7 @@ def run(cfg, control, vision, clearance=0.01, margin=0.01, verbose=False, log=pr
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--scene", default=scene.DEFAULT_SCENE, help="floor (default), table, or a scene file")
-    ap.add_argument("--mount", choices=["side", "front"], help="override MOUNT from the scene file")
+    ap.add_argument("--mount", choices=["side", "front"], help="override mount from the scene file")
     ap.add_argument("--control", default="configs/control/real.yaml")
     ap.add_argument("--vision", default="configs/vision/sim.yaml")
     ap.add_argument("--margin", type=float, default=0.01, help="REACH_MARGIN (m)")
@@ -440,13 +440,13 @@ def main():
 
     cfg = scene.without_mount_offset(scene.load_config(args.scene))
     if args.mount:
-        cfg["MOUNT"] = args.mount
+        cfg["mount"] = args.mount
     control = config_file.load(args.control)
     vision = config_file.load(args.vision)
     print(
         f"gripper down; clearance >= {args.clearance * 1000:.0f} mm to the table top, columns and feet; "
-        f"joints kept {cfg.get('JOINT_LIMIT_MARGIN_DEG', 2.0)}° inside their limits; "
-        f"table {cfg['TABLE_HEIGHT_RANGE'][0]:.2f} ~ {cfg['TABLE_HEIGHT_RANGE'][1]:.2f} m"
+        f"joints kept {cfg.get('joint_limit_margin_deg', 2.0)}° inside their limits; "
+        f"table {cfg['table_height_range'][0]:.2f} ~ {cfg['table_height_range'][1]:.2f} m"
     )
     best, rejected, pl = run(cfg, control, vision, args.clearance, args.margin, args.verbose)
 
@@ -486,9 +486,9 @@ def main():
             f"(tower top {total * h:.3f} m above the floor)"
         )
     if args.apply:
-        values = {"TABLE_HEIGHT": H, "TOWER_XY": list(best["tower"]), "PICK_XY": list(best["pick"])}
+        values = {"table_height": H, "tower_xy": list(best["tower"]), "pick_xy": list(best["pick"])}
         if args.mount:
-            values["MOUNT"] = args.mount
+            values["mount"] = args.mount
         set_keys(cfg["_path"], values)
         print(f"written to {cfg['_path'].relative_to(scene.REPO)}")
 

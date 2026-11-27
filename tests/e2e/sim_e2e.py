@@ -175,10 +175,10 @@ class Monitor(threading.Thread):
         self.m, self.d, _ = scene.build_physics(cfg)
         m = self.m
         self.frame = scene.base_frame(cfg)
-        self.tower_world = np.array(cfg["TOWER_XY"]) + scene.scene_offset(cfg)[:2]
+        self.tower_world = np.array(cfg["tower_xy"]) + scene.scene_offset(cfg)[:2]
         self.tower_xy = self.frame.to_base(self.tower_world)  # base frame, like the end-effector samples
-        self.h = control["CUBE_HEIGHT"]
-        self.cubes = {m.body(f"cube_{i}").id: i for i in range(int(cfg.get("CUBE_POOL", 40)))}
+        self.h = control["cube_height"]
+        self.cubes = {m.body(f"cube_{i}").id: i for i in range(int(cfg.get("cube_pool", 40)))}
         self.cube_geom = {i: m.geom(f"cube_{i}").id for i in self.cubes.values()}
         root = m.body("base_link").id
 
@@ -388,7 +388,7 @@ class Monitor(threading.Thread):
         v = np.r_[0.0, np.linalg.norm(np.diff(p, axis=0), axis=1) / np.maximum(np.diff(t), 1e-3)]
         closed = w < CLOSED_WIDTH
         edges = np.flatnonzero(np.diff(closed.astype(int)))
-        grasp_z = self.control["PICK_GRASP_Z"]
+        grasp_z = self.control["pick_grasp_z"]
         transfers = []
         for e in edges:
             start = e + 1
@@ -566,7 +566,7 @@ def run(
                 held=np.array(monitor.held),
                 qpos=np.array(monitor.qpos),
             )
-        scan = np.array([control["PICK_POSITION_X"], control["PICK_POSITION_Y"], control["PICK_POSITION_Z"]])
+        scan = np.array([control["pick_position_x"], control["pick_position_y"], control["pick_position_z"]])
         report["events"] = monitor.events
         report["tower_disturbed"] = [e for e in monitor.events if "tower disturbed" in e[1]]
         report["tower_alignment"] = monitor.tower_alignment()

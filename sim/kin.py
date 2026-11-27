@@ -18,7 +18,7 @@ DOWN = np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]])
 
 def limit_margin(cfg: dict) -> float:
     """How far (rad) IK solutions must stay inside the URDF joint limits."""
-    return math.radians(cfg.get("JOINT_LIMIT_MARGIN_DEG", 2.0))
+    return math.radians(cfg.get("joint_limit_margin_deg", 2.0))
 
 
 class Arm:

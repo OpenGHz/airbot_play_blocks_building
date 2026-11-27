@@ -16,13 +16,13 @@ def _closest(path, z):
 
 def compute(cfg: dict, control: dict, table_height: float | None = None, margin: float = 0.01) -> dict:
     """Poses at the given table height. Raises RuntimeError if the floor or the pick area is out of reach."""
-    h_table = cfg["TABLE_HEIGHT"] if table_height is None else table_height
+    h_table = cfg["table_height"] if table_height is None else table_height
     model, data, _ = scene.build(cfg, h_table)
     arm = kin.Arm(model, data, scene.base_frame(cfg, h_table), kin.limit_margin(cfg))
-    h, gap = control["CUBE_HEIGHT"], control.get("GAP_PLACE", 0.003)
-    hold = scene.finger_q_for_gap(cfg["CUBE_SIZE"])
+    h, gap = control["cube_height"], control.get("gap_place", 0.003)
+    hold = scene.finger_q_for_gap(cfg["cube_size"])
     scan, grasp = scene.pick_targets(cfg, control, h_table)
-    z_first = control["PICK_GRASP_Z"] - h_table  # block 1 on the floor
+    z_first = control["pick_grasp_z"] - h_table  # block 1 on the floor
     poses = {"home": ([0.0] * 6, 0.0, None)}
 
     # Pick scan pose; like airbot_play_pick_place.py, keep the solution with joint6 > 0.
@@ -39,7 +39,7 @@ def compute(cfg: dict, control: dict, table_height: float | None = None, margin:
         raise RuntimeError(f"grasping at z={grasp:+.3f} in the pick area is out of reach")
 
     # Lower a block along the vertical line above the tower spot, as the place stage will.
-    xy = cfg["TOWER_XY"]
+    xy = cfg["tower_xy"]
     tower = reach.extent(arm, xy, margin=margin)
     if tower is None or tower["z_min"] > z_first + 1e-6:
         raise RuntimeError(f"the floor is out of reach at the tower spot {xy}")

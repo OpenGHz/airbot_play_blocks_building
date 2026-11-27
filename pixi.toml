@@ -98,7 +98,7 @@ sim-panel = { cmd = "python -m sim.panel", description = "Open the panel again: 
 sim-ctl = { cmd = "python -m sim.ctl", description = "The operator's hands in the simulation: sim-ctl cube to-gripper|put-under|nudge|set|take|respawn|reset|list, sim-ctl arm where|mount|save" }
 sim-slip-test = { cmd = "python -m sim.slip_test", description = "Check that a grasped cube does not slip out of the gripper" }
 sim-record = { cmd = "python -m sim.record", description = "Record the running simulation (whole arm + wrist camera inset) to runs/sim/record_*.mp4 until Ctrl+C (--snapshot PNG to choose the view)" }
-sim-calib-vision = { cmd = "python -m sim.calib_vision", description = "Compute EXPECT_X / EXPECT_PICK_REF / EXPECT_PLACE_REF for configs/vision/sim.yaml (--apply)" }
+sim-calib-vision = { cmd = "python -m sim.calib_vision", description = "Compute expect_x / expect_pick_ref / expect_place_ref for configs/vision/sim.yaml (--apply)" }
 sim-vision-check = { cmd = "python -m sim.vision_check", description = "Run the block detection on rendered images: pick-area layouts and towers; fails if it merges cubes or locks onto the wrong one" }
 # Scene analysis: look at it, render it, pick the tower spot and table height.
 sim-view = { cmd = "python -m sim.view", description = "Open the MuJoCo viewer on the simulated scene (--scene floor|table, --pose pick|floor|top|home)" }

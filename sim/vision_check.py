@@ -6,9 +6,9 @@ segmentation image to tell which object the detection locked onto:
 
   pick   random pick-area layouts placed the way `pixi run sim` places them, camera at the
          pick scan pose. Every cube's top face has to be a blob of its own (no two cubes
-         merged) within AREA_LIMIT_PICK, and the detection of each colour has to lock onto
+         merged) within area_limit_pick, and the detection of each colour has to lock onto
          a cube of that colour.
-  place  towers of 1 .. --levels blocks, the next block held GAP_PLACE above the top one
+  place  towers of 1 .. --levels blocks, the next block held gap_place above the top one
          (the adjust pose), the top block shifted by up to 1 cm, and a full pick area of the
          top block's colour next to the tower. The detection has to lock onto the top block.
 
@@ -37,22 +37,22 @@ class Checker:
         self.cfg, self.control, self.vision = cfg, control, vision
         self.cam = Cam(cfg)
         self.m, self.d = self.cam.m, self.cam.d
-        c = cfg["CAMERA"]
-        self.seg = mujoco.Renderer(self.m, int(c["HEIGHT"]), int(c["WIDTH"]))
+        c = cfg["camera"]
+        self.seg = mujoco.Renderer(self.m, int(c["height"]), int(c["width"]))
         self.seg.enable_segmentation_rendering()
-        self.names = list(cfg["CUBE_COLORS"])
+        self.names = list(cfg["cube_colors"])
         self.hsv = {
-            self.names[0]: (vision["HSV1_L"], vision["HSV1_H"]),
-            self.names[1]: (vision["HSV2_L"], vision["HSV2_H"]),
+            self.names[0]: (vision["hsv1_l"], vision["hsv1_h"]),
+            self.names[1]: (vision["hsv2_l"], vision["hsv2_h"]),
         }
         ph = place_hsv(vision)
         self.hsv_place = {self.names[0]: ph[1], self.names[1]: ph[2]}
-        width = int(c["WIDTH"])
-        ex = width / 2 if vision["EXPECT_X"] == "AUTO" else float(vision["EXPECT_X"])
-        self.ref = (ex, float(vision["EXPECT_PICK_REF"]))  # Best_Contour.py uses it in both stages
-        self.crop_x = vision.get("PLACE_CROP_X")
+        width = int(c["width"])
+        ex = width / 2 if vision["expect_x"] == "AUTO" else float(vision["expect_x"])
+        self.ref = (ex, float(vision["expect_pick_ref"]))  # Best_Contour.py uses it in both stages
+        self.crop_x = vision.get("place_crop_x")
         self.s = self.cam.s
-        self.z_floor = control["PICK_GRASP_Z"] - 0.0025 - self.s  # cube bottom; grasp point ~2.5 mm above the centre
+        self.z_floor = control["pick_grasp_z"] - 0.0025 - self.s  # cube bottom; grasp point ~2.5 mm above the centre
 
     def render(self):
         img = self.cam.render()
@@ -70,7 +70,7 @@ class Checker:
 
     def locked(self, b, ids, place: bool):
         """Geom ids under the contour Contour.NFC_F selects (None when nothing is selected)."""
-        area = self.vision["AREA_LIMIT_PLACE" if place else "AREA_LIMIT_PICK"]
+        area = self.vision["area_limit_place" if place else "area_limit_pick"]
         *_, cnt = Contour.NFC_F(b, area, 5.5 if place else 3.0, self.ref)
         if cnt is None:
             return None
@@ -85,7 +85,7 @@ class Checker:
     def pick(self, layouts: int, log) -> int:
         world = World(self.cfg)
         open_q = scene.finger_q_for_gap(0.07)
-        scan = [self.control[k] for k in ("PICK_POSITION_X", "PICK_POSITION_Y", "PICK_POSITION_Z")]
+        scan = [self.control[k] for k in ("pick_position_x", "pick_position_y", "pick_position_z")]
         problems = 0
         for seed in range(layouts):
             world.pick.rng = np.random.default_rng(seed)
@@ -114,13 +114,13 @@ class Checker:
                     if len(owners) > 1:
                         problems += 1
                         log(f"pick layout {seed}, {c}: one blob ({size} px) covers cubes {owners}")
-                    lo, hi = self.vision["AREA_LIMIT_PICK"]
+                    lo, hi = self.vision["area_limit_pick"]
                     if len(owners) == 1 and lo < size < hi:
                         seen.add(owners[0])
                 for i, cc in placed:
                     if cc == c and i not in seen:
                         problems += 1
-                        log(f"pick layout {seed}: the {c} cube_{i} is not seen as one top face within AREA_LIMIT_PICK")
+                        log(f"pick layout {seed}: the {c} cube_{i} is not seen as one top face within area_limit_pick")
                 got = self.locked(b, ids, place=False)
                 want = {self.geom(i) for i, cc in placed if cc == c}
                 if want and (got is None or len(got & want) != 1):  # nothing, or not exactly one cube of this colour
@@ -130,9 +130,9 @@ class Checker:
         return problems
 
     def place(self, levels: int, log) -> int:
-        tx, ty = self.control["PLACE_POSITION_X"], self.control["PLACE_POSITION_Y"]
-        h, gap = self.control["CUBE_HEIGHT"], self.control.get("GAP_PLACE", 0.003)
-        hold_q = scene.finger_q_for_gap(self.cfg["CUBE_SIZE"]) + 0.0005
+        tx, ty = self.control["place_position_x"], self.control["place_position_y"]
+        h, gap = self.control["cube_height"], self.control.get("gap_place", 0.003)
+        hold_q = scene.finger_q_for_gap(self.cfg["cube_size"]) + 0.0005
         world = World(self.cfg)
         area = world.pick
         corners = [
@@ -160,7 +160,7 @@ class Checker:
                     )
                     used[top] += 1
                 held = self.names[k % 2]
-                z_grasp = self.control["PICK_GRASP_Z"] + k * h + gap
+                z_grasp = self.control["pick_grasp_z"] + k * h + gap
                 self.cam.put(self.cam.cube(held, used[held]), (tx, ty, z_grasp - 0.0025))
                 try:
                     self.cam.pose([tx, ty, z_grasp], hold_q)

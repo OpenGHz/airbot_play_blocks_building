@@ -15,9 +15,9 @@ def floor_cfg():
 
 
 def test_floor_scene_inherits_from_its_base(floor_cfg):
-    assert floor_cfg["NAME"] == "floor"
-    assert floor_cfg["PICK_SURFACE"] == "floor"
-    assert floor_cfg["CAMERA"]["WIDTH"] == 640  # from sim.yaml through BASE
+    assert floor_cfg["name"] == "floor"
+    assert floor_cfg["pick_surface"] == "floor"
+    assert floor_cfg["camera"]["width"] == 640  # from sim.yaml through base
     assert floor_cfg["_path"].name == "sim_floor.yaml"
 
 
@@ -25,8 +25,8 @@ def test_physics_model_has_the_pool_fingers_and_pick_zone(floor_cfg):
     m, _, _ = scene.build_physics(floor_cfg)
     for name in ("pick_zone", "finger_left", "finger_right", "finger_left_upper", "finger_right_upper"):
         assert m.geom(name).id >= 0
-    assert all(m.body(f"cube_{i}").id >= 0 for i in range(floor_cfg["CUBE_POOL"]))
-    assert m.opt.noslip_iterations == floor_cfg["NOSLIP_ITERATIONS"]
+    assert all(m.body(f"cube_{i}").id >= 0 for i in range(floor_cfg["cube_pool"]))
+    assert m.opt.noslip_iterations == floor_cfg["noslip_iterations"]
 
 
 @pytest.fixture(scope="module")

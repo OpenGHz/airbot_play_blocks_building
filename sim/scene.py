@@ -2,7 +2,7 @@
 table edge, cubes in the pick area, and the tower spot on the floor next to the table.
 
 Two flavours share this module:
-  * analysis (`build`, `build_spec`): the cubes listed in PICK_CUBES, finger meshes as
+  * analysis (`build`, `build_spec`): the cubes listed in pick_cubes, finger meshes as
     collision shapes; used by sim-reach / sim-snapshot / sim-view.
   * physics (`build_physics`): what `pixi run sim` steps in real time. A pool of free
     cubes (parked far away until the pick area needs them), box-shaped finger
@@ -17,10 +17,10 @@ on the table top: the mount keeps the whole plate on the table (`base_plate`, `t
 Frames. World: the floor is z = 0. Scene frame: the world shifted up by the table
 height; every position in configs/scene/*.yaml (table, tower spot, pick area) is in it.
 Robot base frame: where the arm stands on the table, the scene frame shifted by
-MOUNT_OFFSET [dx, dy] (m) and turned MOUNT_YAW (deg, about the vertical through the base
+mount_offset [dx, dy] (m) and turned mount_yaw (deg, about the vertical through the base
 centre; both default 0, the scene file's mount); positions in configs/control/*.yaml are
 in it, like the real robot's keyboard readouts (`BaseFrame` converts). Moving the arm on
-the table (MOUNT_OFFSET / MOUNT_YAW, the mouse or the panel in the `pixi run sim` window,
+the table (mount_offset / mount_yaw, the mouse or the panel in the `pixi run sim` window,
 or sim-ctl) moves only the arm: the table, the floor marks and the cubes stay where they are.
 """
 
@@ -80,47 +80,47 @@ def scene_path(name: str | pathlib.Path | None = None) -> pathlib.Path:
 
 
 def load_config(name: str | pathlib.Path | None = None) -> dict:
-    """Load a scene file. A file with "BASE" starts from that file and overrides its top-level keys."""
+    """Load a scene file. A file with "base" starts from that file and overrides its top-level keys."""
     path = scene_path(name)
     cfg = config_file.load(path)
-    if "BASE" in cfg:
-        merged = load_config(path.parent / cfg.pop("BASE"))
+    if "base" in cfg:
+        merged = load_config(path.parent / cfg.pop("base"))
         merged.update(cfg)
         cfg = merged
     cfg["_path"] = path
-    cfg.setdefault("NAME", path.stem)
+    cfg.setdefault("name", path.stem)
     return cfg
 
 
 def pick_on_floor(cfg: dict) -> bool:
-    return cfg.get("PICK_SURFACE", "table") == "floor"
+    return cfg.get("pick_surface", "table") == "floor"
 
 
 def table_rect(cfg: dict):
     """Table top outline (x0, x1, y0, y1) in the base frame, and the outward normal
     (unit x, y) of the edge the arm is mounted at.
 
-    MOUNT "side":  the arm faces along the table's depth, the left side of its base
+    mount "side":  the arm faces along the table's depth, the left side of its base
                    plate flush with a short edge (the tower is to its left).
-    MOUNT "front": the arm faces out over the middle of a long edge, the front of its
+    mount "front": the arm faces out over the middle of a long edge, the front of its
                    base plate flush with the edge (the tower is in front of it).
-                   BASE_FRONT (optional) puts the edge that far in front of the base
+                   base_front (optional) puts the edge that far in front of the base
                    centre instead; it cannot be closer than the plate's front."""
-    depth, width = cfg["TABLE_DEPTH"], cfg["TABLE_WIDTH"]
+    depth, width = cfg["table_depth"], cfg["table_width"]
     _, front, _, left = base_plate()
-    mount = cfg.get("MOUNT", "side")
+    mount = cfg.get("mount", "side")
     if mount == "side":
-        x0 = -cfg["SIDE_MOUNT_BACK"]
+        x0 = -cfg["side_mount_back"]
         return (x0, x0 + depth, left - width, left), (0.0, 1.0)
     if mount == "front":
-        x1 = cfg.get("BASE_FRONT", front)
+        x1 = cfg.get("base_front", front)
         if x1 < front - 1e-9:
             raise ValueError(
-                f"BASE_FRONT {x1} m: the base plate reaches {front:.4f} m in front of the base centre, "
+                f"base_front {x1} m: the base plate reaches {front:.4f} m in front of the base centre, "
                 "it would overhang the table edge"
             )
         return (x1 - depth, x1, -width / 2, width / 2), (1.0, 0.0)
-    raise ValueError(f"MOUNT must be side or front, not {mount!r}")
+    raise ValueError(f"mount must be side or front, not {mount!r}")
 
 
 def edge_angle(cfg: dict) -> float:
@@ -139,19 +139,19 @@ def outside_table(cfg: dict, x: float, y: float) -> float:
 
 
 def pick_cubes(cfg: dict, pick_xy=None) -> list:
-    """(x, y, color) of the cubes in the pick area (PICK_CUBES are offsets from PICK_XY), base frame."""
-    px, py = cfg["PICK_XY"] if pick_xy is None else pick_xy
-    return [(px + dx, py + dy, c) for dx, dy, c in cfg["PICK_CUBES"]]
+    """(x, y, color) of the cubes in the pick area (pick_cubes are offsets from pick_xy), base frame."""
+    px, py = cfg["pick_xy"] if pick_xy is None else pick_xy
+    return [(px + dx, py + dy, c) for dx, dy, c in cfg["pick_cubes"]]
 
 
 def pick_targets(cfg: dict, control: dict, table_height: float | None = None):
-    """Pick scan position (above PICK_XY) and grasp height, base frame.
+    """Pick scan position (above pick_xy) and grasp height, base frame.
 
     configs/control/*.yaml gives the heights above the surface the cubes stand on."""
-    h = cfg["TABLE_HEIGHT"] if table_height is None else table_height
+    h = cfg["table_height"] if table_height is None else table_height
     dz = -h if pick_on_floor(cfg) else 0.0
-    x, y = cfg["PICK_XY"]
-    return [x, y, control["PICK_POSITION_Z"] + dz], control["PICK_GRASP_Z"] + dz
+    x, y = cfg["pick_xy"]
+    return [x, y, control["pick_position_z"] + dz], control["pick_grasp_z"] + dz
 
 
 def euler_xyz_to_quat(euler) -> np.ndarray:
@@ -185,11 +185,11 @@ def robot_spec(cfg: dict) -> mujoco.MjSpec:
         joint.damping[0] = 0.5 if joint.name in FINGER_JOINTS else 2.0  # [linear, ...]
         joint.armature = 0.01
 
-    cam = cfg["CAMERA"]
-    mount = spec.body(cam["PARENT"]).add_body(name="eye_mount", pos=cam["POS"], quat=euler_xyz_to_quat(cam["EULER"]))
+    cam = cfg["camera"]
+    mount = spec.body(cam["parent"]).add_body(name="eye_mount", pos=cam["pos"], quat=euler_xyz_to_quat(cam["euler"]))
     # The camera body itself is the URDF's camera_stand mesh on link6 (drawn, and a collision
     # geom like the other links), with the lens at this camera's position.
-    mount.add_camera(name="eye", fovy=cam["FOVY"])
+    mount.add_camera(name="eye", fovy=cam["fovy"])
     return spec
 
 
@@ -215,21 +215,21 @@ def pool_park_xy(i: int) -> tuple[float, float]:
 
 
 def pool_colors(cfg: dict) -> list[str]:
-    """Colour of each pool cube: alternating through CUBE_COLORS."""
-    names = list(cfg["CUBE_COLORS"])
-    return [names[i % len(names)] for i in range(int(cfg.get("CUBE_POOL", 40)))]
+    """Colour of each pool cube: alternating through cube_colors."""
+    names = list(cfg["cube_colors"])
+    return [names[i % len(names)] for i in range(int(cfg.get("cube_pool", 40)))]
 
 
 def _env_xml(cfg: dict, table_height: float, physics: bool = False) -> str:
     h = table_height
     (x0, x1, y0, y1), _ = table_rect(cfg)
-    thick = cfg["TABLE_THICKNESS"]
+    thick = cfg["table_thickness"]
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    col_x, col_y = cfg["COLUMN_SIZE"]
-    foot_x, foot_y, foot_h = cfg["FOOT_SIZE"]
+    col_x, col_y = cfg["column_size"]
+    foot_x, foot_y, foot_h = cfg["foot_size"]
     col_len = h - thick - foot_h
     # Two lifting columns near the ends of the long (y) side, feet running front to back.
-    columns = [y1 - cfg["COLUMN_INSET"], y0 + cfg["COLUMN_INSET"]]
+    columns = [y1 - cfg["column_inset"], y0 + cfg["column_inset"]]
 
     legs = ""
     for i, y in enumerate(columns):
@@ -240,23 +240,23 @@ def _env_xml(cfg: dict, table_height: float, physics: bool = False) -> str:
             f'size="{col_x / 2} {col_y / 2} {col_len / 2}" material="frame"/>\n'
         )
 
-    s = cfg["CUBE_SIZE"] / 2
+    s = cfg["cube_size"] / 2
     cubes = ""
     if physics:
         for i, color in enumerate(pool_colors(cfg)):
-            rgba = " ".join(map(str, cfg["CUBE_COLORS"][color]))
+            rgba = " ".join(map(str, cfg["cube_colors"][color]))
             x, y = pool_park_xy(i)
-            solref = f"{cfg.get('CONTACT_TIMECONST', CONTACT_TIMECONST)} 1"
-            cubes += _cube_xml(f"cube_{i}", (x, y, s), rgba, s, cfg["CUBE_MASS"], solref)
+            solref = f"{cfg.get('contact_timeconst', CONTACT_TIMECONST)} 1"
+            cubes += _cube_xml(f"cube_{i}", (x, y, s), rgba, s, cfg["cube_mass"], solref)
     else:
         z0 = 0.0 if pick_on_floor(cfg) else h
         for i, (x, y, color) in enumerate(pick_cubes(cfg)):
-            rgba = " ".join(map(str, cfg["CUBE_COLORS"][color]))
-            cubes += _cube_xml(f"cube_{i}", (x, y, z0 + s), rgba, s, cfg["CUBE_MASS"])
+            rgba = " ".join(map(str, cfg["cube_colors"][color]))
+            cubes += _cube_xml(f"cube_{i}", (x, y, z0 + s), rgba, s, cfg["cube_mass"])
     # noslip removes the slow creep of a grasped cube under the soft contact model.
-    noslip = f' noslip_iterations="{int(cfg.get("NOSLIP_ITERATIONS", 5))}"' if physics else ""
+    noslip = f' noslip_iterations="{int(cfg.get("noslip_iterations", 5))}"' if physics else ""
 
-    tx, ty = cfg["TOWER_XY"]
+    tx, ty = cfg["tower_xy"]
     return f"""
 <mujoco model="airbot_play_blocks_building">
   <option timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="10"{noslip}/>
@@ -292,7 +292,7 @@ def _env_xml(cfg: dict, table_height: float, physics: bool = False) -> str:
 
 def build_spec(cfg: dict | None = None, table_height: float | None = None, physics: bool = False) -> mujoco.MjSpec:
     cfg = cfg or load_config()
-    h = cfg["TABLE_HEIGHT"] if table_height is None else table_height
+    h = cfg["table_height"] if table_height is None else table_height
     spec = mujoco.MjSpec.from_string(_env_xml(cfg, h, physics))
     robot = robot_spec(cfg)
     dx, dy = mount_offset(cfg)
@@ -395,14 +395,14 @@ def build_physics(cfg: dict | None = None):
             group=COLLISION_GROUP,
             friction=[1.5, 0.01, 0.0001],
             condim=4,
-            solref=[cfg.get("CONTACT_TIMECONST", CONTACT_TIMECONST), 1.0],
+            solref=[cfg.get("contact_timeconst", CONTACT_TIMECONST), 1.0],
             mass=0.0,
         )
     # Invisible, non-colliding box marking the pick area (to tell when the arm is clear of it).
-    area = cfg.get("PICK_AREA", {})
-    hx, hy = area.get("HALF_SIZE", [0.04, 0.06])
-    px, py = area.get("CENTER", cfg["PICK_XY"])
-    z0 = 0.0 if pick_on_floor(cfg) else cfg["TABLE_HEIGHT"]
+    area = cfg.get("pick_area", {})
+    hx, hy = area.get("half_size", [0.04, 0.06])
+    px, py = area.get("center", cfg["pick_xy"])
+    z0 = 0.0 if pick_on_floor(cfg) else cfg["table_height"]
     spec.worldbody.add_geom(
         name="pick_zone",
         type=mujoco.mjtGeom.mjGEOM_BOX,
@@ -418,14 +418,14 @@ def build_physics(cfg: dict | None = None):
 
 
 def mount_offset(cfg: dict) -> np.ndarray:
-    """Where the arm stands on the table relative to the scene file's mount: MOUNT_OFFSET [dx, dy] (m)."""
-    dx, dy = cfg.get("MOUNT_OFFSET", (0.0, 0.0))
+    """Where the arm stands on the table relative to the scene file's mount: mount_offset [dx, dy] (m)."""
+    dx, dy = cfg.get("mount_offset", (0.0, 0.0))
     return np.array([float(dx), float(dy)])
 
 
 def mount_yaw(cfg: dict) -> float:
-    """How far the arm is turned on the table from the scene file's mount (rad): MOUNT_YAW (deg)."""
-    return math.radians(float(cfg.get("MOUNT_YAW", 0.0)))
+    """How far the arm is turned on the table from the scene file's mount (rad): mount_yaw (deg)."""
+    return math.radians(float(cfg.get("mount_yaw", 0.0)))
 
 
 def yaw_quat(yaw: float) -> np.ndarray:
@@ -456,13 +456,13 @@ class BaseFrame:
 
 
 def base_offset(cfg: dict, table_height: float | None = None) -> np.ndarray:
-    """World position of the robot base frame's origin (`base_frame` adds MOUNT_YAW)."""
+    """World position of the robot base frame's origin (`base_frame` adds mount_yaw)."""
     dx, dy = mount_offset(cfg)
-    return np.array([dx, dy, cfg["TABLE_HEIGHT"] if table_height is None else table_height])
+    return np.array([dx, dy, cfg["table_height"] if table_height is None else table_height])
 
 
 def base_frame(cfg: dict, table_height: float | None = None) -> BaseFrame:
-    """The robot base frame at the mount in cfg (MOUNT_OFFSET, MOUNT_YAW)."""
+    """The robot base frame at the mount in cfg (mount_offset, mount_yaw)."""
     return BaseFrame(base_offset(cfg, table_height), mount_yaw(cfg))
 
 
@@ -476,7 +476,7 @@ def place_base(model: mujoco.MjModel, mount_xy, yaw: float) -> None:
 
 def scene_offset(cfg: dict, table_height: float | None = None) -> np.ndarray:
     """World position of the scene frame (positions in the scene file + this = world point)."""
-    return np.array([0.0, 0.0, cfg["TABLE_HEIGHT"] if table_height is None else table_height])
+    return np.array([0.0, 0.0, cfg["table_height"] if table_height is None else table_height])
 
 
 def mount_limits(cfg: dict, yaw: float = 0.0) -> tuple[float, float, float, float]:
@@ -489,7 +489,7 @@ def mount_limits(cfg: dict, yaw: float = 0.0) -> tuple[float, float, float, floa
     return x0 - ax0, x1 - ax1, y0 - ay0, y1 - ay1
 
 
-MOUNT_KEYS = ("MOUNT_OFFSET", "MOUNT_YAW")
+MOUNT_KEYS = ("mount_offset", "mount_yaw")
 
 
 def without_mount_offset(cfg: dict) -> dict:

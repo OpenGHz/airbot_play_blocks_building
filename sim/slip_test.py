@@ -79,7 +79,7 @@ def run(cfg, control, seconds_scale=1.0):
     x, y, z = w.cube_pos(i)
     yaw = w.cube_yaw(i)
     base = w.base[2]
-    grasp_z = z - base  # grasp at the cube centre (PICK_GRASP_Z is "about the centre")
+    grasp_z = z - base  # grasp at the cube centre (pick_grasp_z is "about the centre")
     r.w.cmd_width = 0.07
     r.move(r.ik([x, y, grasp_z + 0.10], yaw), 2.0)
     r.move(r.ik([x, y, grasp_z + 0.025], yaw), 1.0)
@@ -89,7 +89,7 @@ def run(cfg, control, seconds_scale=1.0):
     p0, R0 = r._rel(i)
     r.track = (i, p0, R0)
     t = seconds_scale
-    tx, ty = cfg["TOWER_XY"]
+    tx, ty = cfg["tower_xy"]
     r.move(r.ik([x, y, grasp_z + 0.035], yaw), 0.6 * t)  # lift
     r.move(r.ik([tx, ty, grasp_z + 0.30]), 1.2 * t)  # carry high
     q = w.cmd_q.copy()
@@ -112,17 +112,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--scene", default=scene.DEFAULT_SCENE)
     ap.add_argument("--control", default="configs/control/sim.yaml")
-    ap.add_argument("--noslip", type=int, help="override NOSLIP_ITERATIONS (0 = off)")
+    ap.add_argument("--noslip", type=int, help="override noslip_iterations (0 = off)")
     ap.add_argument("--trials", type=int, default=5, help="different random pick-area layouts")
     ap.add_argument("--fast", type=float, default=1.0, help="time scale of the moves (0.5 = twice as fast)")
     args = ap.parse_args()
     cfg = scene.without_mount_offset(scene.load_config(args.scene))  # grasps at world x, y (= base frame)
     if args.noslip is not None:
-        cfg["NOSLIP_ITERATIONS"] = args.noslip
+        cfg["noslip_iterations"] = args.noslip
     control = config_file.load(args.control)
     worst = {"max_slip_mm": 0.0, "max_rot_deg": 0.0, "held": True}
     for k in range(args.trials):
-        cfg.setdefault("PICK_AREA", {})["SEED"] = k
+        cfg.setdefault("pick_area", {})["seed"] = k
         res = run(cfg, control, args.fast)
         print(
             f"trial {k}: slip {res['max_slip_mm']:.2f} mm, rotation {res['max_rot_deg']:.2f} deg, held: {res['held']}"

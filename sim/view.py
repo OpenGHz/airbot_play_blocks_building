@@ -32,7 +32,7 @@ def main():
     tower = res["layers"] - 1 if args.pose == "top" else 0
     model, data = snapshot.pose_scene(cfg, res, args.pose, tower)
     print(
-        f"table {res['table_height']:.3f} m, tower spot {cfg['TOWER_XY']}, "
+        f"table {res['table_height']:.3f} m, tower spot {cfg['tower_xy']}, "
         f"{res['layers']} blocks reachable without lifting; pose: {args.pose}"
     )
 

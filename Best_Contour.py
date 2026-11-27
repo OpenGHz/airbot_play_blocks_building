@@ -34,7 +34,7 @@ def _text(img, s, org, color=(255, 255, 255), scale=0.5):
 
 def find_held_cube(binary, min_area):
     """
-    Place 阶段手里的物块。binary 是手里物块颜色的二值图（已按 PLACE_CROP_X 裁剪，不按第 423 行裁剪）。
+    Place 阶段手里的物块。binary 是手里物块颜色的二值图（已按 place_crop_x 裁剪，不按第 423 行裁剪）。
     手里的物块离相机最近，在图像最下面，所以取下边最低的轮廓（塔里同色的物块在它上面，中间隔着塔顶物块）。
     返回 dict(box=外接矩形四个顶点, x=中心 x, edge=图像上边沿 y)，没找到时为 None。
     图像上边沿是图像里最上面的那条边，实际是物块的下边沿，挨着塔顶物块。
@@ -53,8 +53,8 @@ def held_shift(held, expect_held_ref, scale):
     手里物块偏离夹爪中心时，塔顶物块图像上边沿的对准目标要移动多少（像素，图像 y）。
     只修正图像 y，即两指之间的空隙方向；手指开合方向（图像 x）不修正。
       held             find_held_cube 的结果
-      expect_held_ref  EXPECT_HELD_REF：物块在夹爪正中时 held 的 edge
-      scale            HELD_SCALE：同样的水平位移，塔顶物块和手里物块在图像 y 上移动的像素之比
+      expect_held_ref  配置里的 expect_held_ref：物块在夹爪正中时 held 的 edge
+      scale            配置里的 held_scale：同样的水平位移，塔顶物块和手里物块在图像 y 上移动的像素之比
                        （手里的物块离相机近，移动得多）
     手里的物块相对夹爪偏了 e，夹爪就要对到塔顶物块 −e 处，此时塔顶物块在图像里正好偏 scale × 手里物块的偏移。
     """
@@ -80,7 +80,7 @@ def draw_overlay(
       ref        参考点 (x, y)：候选轮廓里离它最近的成为目标；x 方向偏差相对它计算
       target     None，或 dict(box=四个顶点, offset=(x, y, 角度), edge=图像上边沿 y 或 None)
       keep       Place 阶段参与识别的区域 (x0, x1, y1)，区域外调暗
-      edge_ref   Place 阶段塔顶物块图像上边沿的期望位置 EXPECT_PLACE_REF
+      edge_ref   Place 阶段塔顶物块图像上边沿的期望位置 expect_place_ref
                  （图像上边沿：图像里最上面的那条边，实际是物块的下边沿）
       held       Place 阶段手里的物块：None 表示没有找它；否则为 find_held_cube 的结果（没找到时为 {}），
                  加上 shift=图像上边沿对准目标的移动（像素）或 None（只识别、不修正）。edge_ref 传移动后的值
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         "--held-cube",
         action="store_true",
         help="Place 阶段同时识别手里的物块，按它沿两指空隙方向在夹爪里的偏差移动对准目标"
-        "（需要配置里的 EXPECT_HELD_REF、HELD_SCALE）",
+        "（需要配置里的 expect_held_ref、held_scale）",
     )
     parser.add_argument(
         "--record",
@@ -214,27 +214,31 @@ if __name__ == "__main__":
 
             with open(config_path) as f:
                 configs = yaml.safe_load(f) or {}
+        from airbot_play_rules import old_key_names
+
+        if old_key_names(configs, config_path):
+            exit(old_key_names(configs, config_path))
         # 颜色阈值设置
-        HSV1_L, HSV1_H = configs["HSV1_L"], configs["HSV1_H"]  # 第1个颜色的HSV参数的下限L和上限H
-        HSV2_L, HSV2_H = configs["HSV2_L"], configs["HSV2_H"]  # 第2个颜色的HSV参数的下限L和上限H
-        # Place 阶段单独的 HSV 阈值（USE_PLACE_HSV 为 "True" 时使用 HSV*_P；否则和 Pick 阶段相同）
-        if str(configs.get("USE_PLACE_HSV", "False")).lower() == "true":
-            HSV1_L_P, HSV1_H_P = configs["HSV1_L_P"], configs["HSV1_H_P"]
-            HSV2_L_P, HSV2_H_P = configs["HSV2_L_P"], configs["HSV2_H_P"]
+        HSV1_L, HSV1_H = configs["hsv1_l"], configs["hsv1_h"]  # 第1个颜色的HSV参数的下限L和上限H
+        HSV2_L, HSV2_H = configs["hsv2_l"], configs["hsv2_h"]  # 第2个颜色的HSV参数的下限L和上限H
+        # Place 阶段单独的 HSV 阈值（use_place_hsv 为 "True" 时使用 hsv*_p；否则和 Pick 阶段相同）
+        if str(configs.get("use_place_hsv", "False")).lower() == "true":
+            HSV1_L_P, HSV1_H_P = configs["hsv1_l_p"], configs["hsv1_h_p"]
+            HSV2_L_P, HSV2_H_P = configs["hsv2_l_p"], configs["hsv2_h_p"]
         else:
             HSV1_L_P, HSV1_H_P, HSV2_L_P, HSV2_H_P = HSV1_L, HSV1_H, HSV2_L, HSV2_H
         # Place 阶段只保留的图像列 [x0, x1]（像素），不设置时保留整幅宽度
-        PLACE_CROP_X = configs.get("PLACE_CROP_X")
+        PLACE_CROP_X = configs.get("place_crop_x")
         # 参考设置
-        EXPECT_PICK_REF = configs["EXPECT_PICK_REF"]  # 中心坐标
-        EXPECT_PLACE_REF = configs["EXPECT_PLACE_REF"]  # 上边沿
-        EXPECT_X = configs["EXPECT_X"]
+        EXPECT_PICK_REF = configs["expect_pick_ref"]  # 中心坐标
+        EXPECT_PLACE_REF = configs["expect_place_ref"]  # 上边沿
+        EXPECT_X = configs["expect_x"]
         # 手里的物块（--held-cube）：物块在夹爪正中时的图像上边沿 y，以及塔顶物块和手里物块在图像 y 上的像素比例
-        EXPECT_HELD_REF = configs.get("EXPECT_HELD_REF")
-        HELD_SCALE = configs.get("HELD_SCALE")
+        EXPECT_HELD_REF = configs.get("expect_held_ref")
+        HELD_SCALE = configs.get("held_scale")
         # 面积限制
-        AREA_LIMIT_PICK = configs["AREA_LIMIT_PICK"]
-        AREA_LIMIT_PLACE = configs["AREA_LIMIT_PLACE"]
+        AREA_LIMIT_PICK = configs["area_limit_pick"]
+        AREA_LIMIT_PLACE = configs["area_limit_place"]
     else:
         print("未指定配置文件，使用默认参数")
         args.default_hsv = args.default_hsv or "real"
@@ -243,7 +247,7 @@ if __name__ == "__main__":
         EXPECT_HELD_REF = HELD_SCALE = None
     if args.held_cube and None in (EXPECT_HELD_REF, HELD_SCALE):
         exit(
-            "--held-cube 需要配置文件里的 EXPECT_HELD_REF、HELD_SCALE："
+            "--held-cube 需要配置文件里的 expect_held_ref、held_scale："
             "仿真用 pixi run sim-calib-vision --apply 算出；真机见 configs/vision/real.yaml 里的说明"
         )
 
@@ -403,7 +407,7 @@ if __name__ == "__main__":
             )
             if args.test != "no":
                 StdVideo.Show("Binary", binary_img, wait_time=1)
-            # 手里的物块（另一种颜色）：--held-cube 时用来修正对准目标；测试模式下也识别，用来标定 EXPECT_HELD_REF
+            # 手里的物块（另一种颜色）：--held-cube 时用来修正对准目标；测试模式下也识别，用来标定 expect_held_ref
             if args.held_cube or args.test != "no":
                 hc = "Green" if vision_attention == "place1" else "Purple"
                 _, held_bin = StdVideo.color_filter(frame, HSV_Threshold[hc + "L_P"], HSV_Threshold[hc + "H_P"])

@@ -3,34 +3,34 @@
 # 末端点（URDF 的 custom_end_link）在两指的指尖，下面的高度都是指尖的高度。
 
 # 抓取扫描位姿：夹爪在抓取区上方，相机看着抓取区
-PICK_JOINT: AUTO        # 抓取扫描位姿的关节角；AUTO 为由下面的位姿逆解得到
-PICK_POSITION_X: 0.2734
-PICK_POSITION_Y: 0.0
-PICK_POSITION_Z: 0.04
-PICK_ROLL: 0
-PICK_PITCH: 1.570796    # 夹爪竖直向下
-PICK_YAW: 0
-PICK_GRASP_Z: 0.015     # 下抓时指尖离桌面的高度
+pick_joint: AUTO        # 抓取扫描位姿的关节角；AUTO 为由下面的位姿逆解得到
+pick_position_x: 0.2734
+pick_position_y: 0.0
+pick_position_z: 0.04
+pick_roll: 0
+pick_pitch: 1.570796    # 夹爪竖直向下
+pick_yaw: 0
+pick_grasp_z: 0.015     # 下抓时指尖离桌面的高度
 
 # 放置位置（塔的位置）
-PLACE_POSITION_X: 0.2734
-PLACE_POSITION_Y: 0.2145
-PLACE_POSITION_Z: PICK_GRASP_Z  # 第一层的松开高度，第 k 层再加 k 个 CUBE_HEIGHT；PICK_GRASP_Z 表示和抓取高度相同
-PLACE_ROLL: PICK_ROLL
-PLACE_PITCH: PICK_PITCH
-PLACE_YAW: PICK_YAW
+place_position_x: 0.2734
+place_position_y: 0.2145
+place_position_z: pick_grasp_z  # 第一层的松开高度，第 k 层再加 k 个 cube_height；pick_grasp_z 表示和抓取高度相同
+place_roll: pick_roll
+place_pitch: pick_pitch
+place_yaw: pick_yaw
 
-CUBE_HEIGHT: 0.025
+cube_height: 0.025
 
 # 以下是可选项，不写时用括号里的缺省值
-# GAP_PLACE: 0.003        # 调节时手里物块的底面比塔顶高出的距离（0.003）
-# PLACE_SETTLE_TIME: 3.0  # 到塔上方后停稳的时间（s），第 1 块松开前、之后开始视觉调节前都等这么久（不写时和原来一样：第 1 块 1 s，之后 3 s）
+# gap_place: 0.003        # 调节时手里物块的底面比塔顶高出的距离（0.003）
+# place_settle_time: 3.0  # 到塔上方后停稳的时间（s），第 1 块松开前、之后开始视觉调节前都等这么久（不写时和原来一样：第 1 块 1 s，之后 3 s）
 # 下面两项只在用规划场景（pixi run pick-place go P1 P2 scene）时起作用
-# TRANSIT_Z_MIN: 0.05     # 抓起后横移时末端的最低高度（不写时和原来一样：第一块抬升 CUBE_HEIGHT + 0.01，之后抬到测高高度）
-# PLACE_RETREAT_Y: 0.075  # 松开、竖直上升后沿 y 侧移的距离，方向自动取朝抓取区的一侧（0，不侧移，只靠规划场景绕开塔）
+# transit_z_min: 0.05     # 抓起后横移时末端的最低高度（不写时和原来一样：第一块抬升 cube_height + 0.01，之后抬到测高高度）
+# place_retreat_y: 0.075  # 松开、竖直上升后沿 y 侧移的距离，方向自动取朝抓取区的一侧（0，不侧移，只靠规划场景绕开塔）
 # 跟踪范围限位：视觉跟踪时末端的 xy 只能在矩形内，防止锁定抓取区外或塔上的同色物块。
 # 半边长取"物块分布范围的一半 + 约 3 cm"，用尺子量，或用键盘把夹爪移到抓取区两个对角按 = 读数
-# PICK_AREA_HALF_SIZE: [0.06, 0.08]    # Pick 阶段矩形的半边长（不写时 Pick 阶段不限位）
-# PICK_AREA_CENTER: [0.2734, 0.0]      # Pick 阶段矩形的中心，抓取区不以扫描点为中心时才需要（PICK_POSITION_X/Y）
-# PLACE_TRACK_HALF_SIZE: [0.02, 0.02]  # Place 阶段矩形的半边长，以 PLACE_POSITION_X/Y 为中心（不写时 Place 阶段不限位）
-# OUT_OF_AREA_FRAMES: 10  # 连续多少帧超出跟踪范围后，回扫描位姿（Pick）或停下报错（Place）（10，约 0.3 s）
+# pick_area_half_size: [0.06, 0.08]    # Pick 阶段矩形的半边长（不写时 Pick 阶段不限位）
+# pick_area_center: [0.2734, 0.0]      # Pick 阶段矩形的中心，抓取区不以扫描点为中心时才需要（pick_position_x/y）
+# place_track_half_size: [0.02, 0.02]  # Place 阶段矩形的半边长，以 place_position_x/y 为中心（不写时 Place 阶段不限位）
+# out_of_area_frames: 10  # 连续多少帧超出跟踪范围后，回扫描位姿（Pick）或停下报错（Place）（10，约 0.3 s）

@@ -14,9 +14,9 @@ def test_arm_mount_where_and_save(sim):
     before = (tmp / "sim_floor.yaml").read_text()
     ctl("arm", "save")
     after = (tmp / "sim_floor.yaml").read_text()
-    assert config_file.load(tmp / "sim_floor.yaml")["MOUNT_OFFSET"] == [0.0, -0.02]
-    assert [ln for ln in after.splitlines() if not ln.startswith("MOUNT_OFFSET")] == before.splitlines(), (
-        "only the MOUNT_OFFSET line is added; comments and the rest stay"
+    assert config_file.load(tmp / "sim_floor.yaml")["mount_offset"] == [0.0, -0.02]
+    assert [ln for ln in after.splitlines() if not ln.startswith("mount_offset")] == before.splitlines(), (
+        "only the mount_offset line is added; comments and the rest stay"
     )
 
 
@@ -41,12 +41,12 @@ def test_arm_turn_and_save(sim):
     ctl("arm", "mount", "--x", "-0.1", "--yaw", "10")
     ctl("arm", "save")
     cfg = config_file.load(tmp / "sim_floor.yaml")
-    assert cfg["MOUNT_OFFSET"] == [-0.1, 0.0] and cfg["MOUNT_YAW"] == 10.0
+    assert cfg["mount_offset"] == [-0.1, 0.0] and cfg["mount_yaw"] == 10.0
     lines = (tmp / "sim_floor.yaml").read_text().splitlines()
-    assert lines.index("MOUNT_YAW: 10.0") == lines.index("MOUNT_OFFSET: [-0.1, 0.0]") + 1
+    assert lines.index("mount_yaw: 10.0") == lines.index("mount_offset: [-0.1, 0.0]") + 1
     ctl("arm", "mount", "--yaw", "0")
     ctl("arm", "save")
-    assert config_file.load(tmp / "sim_floor.yaml")["MOUNT_YAW"] == 0.0, "turned back: the saved yaw is reset too"
+    assert config_file.load(tmp / "sim_floor.yaml")["mount_yaw"] == 0.0, "turned back: the saved yaw is reset too"
 
 
 def test_cube_set(sim):

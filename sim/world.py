@@ -50,18 +50,18 @@ class PickArea:
     def __init__(self, world: World):
         self.w = world
         cfg = world.cfg
-        area = cfg.get("PICK_AREA", {})
-        # Where the cubes go: CENTER (default PICK_XY) +- HALF_SIZE. The wrist camera only sees the
+        area = cfg.get("pick_area", {})
+        # Where the cubes go: center (default pick_xy) +- half_size. The wrist camera only sees the
         # floor ahead of the gripper at the pick scan pose, so the area sits in front of the scan point.
-        self.center = np.array(area.get("CENTER", cfg["PICK_XY"]), dtype=float)
-        self.half = np.array(area.get("HALF_SIZE", [0.04, 0.06]), dtype=float)
-        self.count = int(area.get("COUNT", 4))
-        self.margin = float(area.get("MARGIN", 0.008))
-        self.yaw = math.radians(area.get("YAW_DEG", 15.0))
-        self.rng = np.random.default_rng(area.get("SEED"))
-        self.s = cfg["CUBE_SIZE"] / 2
+        self.center = np.array(area.get("center", cfg["pick_xy"]), dtype=float)
+        self.half = np.array(area.get("half_size", [0.04, 0.06]), dtype=float)
+        self.count = int(area.get("count", 4))
+        self.margin = float(area.get("margin", 0.008))
+        self.yaw = math.radians(area.get("yaw_deg", 15.0))
+        self.rng = np.random.default_rng(area.get("seed"))
+        self.s = cfg["cube_size"] / 2
         self.r = self.s * math.sqrt(2)  # circumradius of a cube's footprint
-        self.surface = 0.0 if scene.pick_on_floor(cfg) else cfg["TABLE_HEIGHT"]  # world z
+        self.surface = 0.0 if scene.pick_on_floor(cfg) else cfg["table_height"]  # world z
         self.batch: list[int] = []
         self.waiting_since: float | None = None
         self.zone = world.model.geom("pick_zone").id
@@ -224,7 +224,7 @@ class World:
         robot = {m.body(b).id for b in kin._robot_bodies(m) if b != "base_link"}
         self.robot_geoms = [g for g in range(m.ngeom) if m.geom_bodyid[g] in robot and m.geom_contype[g]]
         self.robot_bodies = robot | {self.root}
-        self.color_names = list(cfg["CUBE_COLORS"])
+        self.color_names = list(cfg["cube_colors"])
         self.cubes = []
         for i, color in enumerate(scene.pool_colors(cfg)):
             j = m.joint(m.body(f"cube_{i}").jntadr[0])
@@ -284,7 +284,7 @@ class World:
         under its centre with centre_only), looking down from just above the cube (or from start_z);
         geomgroup (6 flags) limits what counts."""
         m, d = self.model, self.data
-        s = self.cfg["CUBE_SIZE"] / 2
+        s = self.cfg["cube_size"] / 2
         pos = self.cube_pos(i)
         x, y = pos[:2] if xy is None else xy
         z = pos[2] + s + 0.002 if start_z is None else start_z
@@ -304,7 +304,7 @@ class World:
 
     def put_down(self, i: int) -> None:
         """Set cube i down upright, at rest, on whatever is under it (like putting it down by hand)."""
-        s = self.cfg["CUBE_SIZE"] / 2
+        s = self.cfg["cube_size"] / 2
         pos = self.cube_pos(i).copy()
         yaw = self.cube_yaw(i)
         pos[2] = self.support_below(i) + s + 0.0005
@@ -313,7 +313,7 @@ class World:
 
     def park(self, i: int) -> None:
         x, y = scene.pool_park_xy(i)
-        self.place_cube(i, (x, y, self.cfg["CUBE_SIZE"] / 2))
+        self.place_cube(i, (x, y, self.cfg["cube_size"] / 2))
         self.cubes[i]["parked"] = True
 
     # What a cube can be set down on from above: the floor, the table and other cubes (group 0),
@@ -330,7 +330,7 @@ class World:
         if not 0 <= i < len(self.cubes) or self.cubes[i]["parked"]:
             raise RuntimeError(f"cube_{i} 不在场景里（sim-ctl cube list 列出场景里的物块）")
         m, d = self.model, self.data
-        s = self.cfg["CUBE_SIZE"] / 2
+        s = self.cfg["cube_size"] / 2
         old = self.cube_pos(i).copy(), self.cube_yaw(i)
         x, y = self.cube_pos(i)[:2] if xy is None else self.frame.to_world(np.asarray(xy, dtype=float)[:2])
         yaw_w = old[1] if yaw is None else float(yaw) + self.frame.yaw
@@ -551,7 +551,7 @@ class World:
 
     def ctl(self, cmd: str, args: dict) -> dict:
         """sim-ctl commands: the operator's hands."""
-        s = self.cfg["CUBE_SIZE"] / 2
+        s = self.cfg["cube_size"] / 2
         if cmd == "cube_reset":
             for i in self.active():
                 self.park(i)
@@ -650,12 +650,12 @@ class World:
             from sim import config_file
 
             path = self.cfg["_path"]
-            config_file.set_keys(path, {"MOUNT_OFFSET": [round(float(v), 4) for v in self.mount]}, after="NAME")
+            config_file.set_keys(path, {"mount_offset": [round(float(v), 4) for v in self.mount]}, after="name")
             yaw = round(math.degrees(self.mount_yaw), 2)
-            keys = "MOUNT_OFFSET"
-            if yaw or "MOUNT_YAW" in config_file.load(path):
-                config_file.set_keys(path, {"MOUNT_YAW": yaw}, after="MOUNT_OFFSET")
-                keys += "、MOUNT_YAW"
+            keys = "mount_offset"
+            if yaw or "mount_yaw" in config_file.load(path):
+                config_file.set_keys(path, {"mount_yaw": yaw}, after="mount_offset")
+                keys += "、mount_yaw"
             return {"message": f"安装位置 {self.mount_text()} 已写入 {path.name}（{keys}），下次 pixi run sim 沿用"}
         raise ValueError(f"unknown sim-ctl command {cmd!r}")
 
@@ -772,7 +772,7 @@ def main() -> None:
 
     cfg = scene.load_config(args.scene)
     if args.seed is not None:
-        cfg.setdefault("PICK_AREA", {})["SEED"] = args.seed
+        cfg.setdefault("pick_area", {})["seed"] = args.seed
     world = World(cfg)
     world.pick.spawn()
 
@@ -795,7 +795,7 @@ def main() -> None:
         camera = threading.Thread(target=_camera_loop, args=(stop, args), daemon=True)
         camera.start()
 
-    print(f"[sim] 仿真已启动（场景 {cfg['NAME']}，桌高 {cfg['TABLE_HEIGHT']} m）。接口：{sock}", flush=True)
+    print(f"[sim] 仿真已启动（场景 {cfg['name']}，桌高 {cfg['table_height']} m）。接口：{sock}", flush=True)
     print("[sim] 下一步在另一个终端运行：pixi run bringup。按 Ctrl+C 回零点并退出。", flush=True)
     panel = None
     try:

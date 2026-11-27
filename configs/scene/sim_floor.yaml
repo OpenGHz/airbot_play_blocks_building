@@ -1,22 +1,22 @@
 # MuJoCo 仿真场景：抓取区在塔旁边的地面上，不随桌子升降（"floor"，pixi run sim 的默认场景）。
-# 这里没写的键来自 BASE 指定的文件。长度单位 m，位置都在机械臂基座坐标系。
-BASE: sim.yaml
-NAME: floor
+# 这里没写的键来自 base 指定的文件。长度单位 m，位置都在机械臂基座坐标系。
+base: sim.yaml
+name: floor
 
-PICK_SURFACE: floor
-TABLE_HEIGHT: 0.475
-TOWER_XY: [0.2121, -0.2121]
-PICK_XY: [0.25, 0.0]
+pick_surface: floor
+table_height: 0.475
+tower_xy: [0.2121, -0.2121]
+pick_xy: [0.25, 0.0]
 
-# pixi run sim 自动补充这个区域的物块：在 CENTER ± HALF_SIZE 内随机放 COUNT 块（两种颜色各一半），
-# 物块之间的距离保证张开的夹爪抓其中一块时离其他物块至少 MARGIN；最后一块被抓走后放下一批。
-# 在抓取扫描位姿（PICK_XY 上方），腕部相机只看得到夹爪前方的地面（x >= 0.25），所以区域放在扫描点前方；
+# pixi run sim 自动补充这个区域的物块：在 center ± half_size 内随机放 count 块（两种颜色各一半），
+# 物块之间的距离保证张开的夹爪抓其中一块时离其他物块至少 margin；最后一块被抓走后放下一批。
+# 在抓取扫描位姿（pick_xy 上方），腕部相机只看得到夹爪前方的地面（x >= 0.25），所以区域放在扫描点前方；
 # 整个区域都在视野内、下抓高度可达，并且离塔至少 13 cm。
-PICK_AREA:
-  CENTER: [0.29, 0.015]
-  HALF_SIZE: [0.035, 0.075]
-  COUNT: 4
-  MARGIN: 0.008
-  YAW_DEG: 15          # 物块随机转角的范围 ±YAW_DEG
-CUBE_POOL: 40          # 仿真里一共准备的物块数
-NOSLIP_ITERATIONS: 5   # MuJoCo noslip 求解器迭代次数，防止物块从夹爪里滑出
+pick_area:
+  center: [0.29, 0.015]
+  half_size: [0.035, 0.075]
+  count: 4
+  margin: 0.008
+  yaw_deg: 15          # 物块随机转角的范围 ±yaw_deg
+cube_pool: 40          # 仿真里一共准备的物块数
+noslip_iterations: 5   # MuJoCo noslip 求解器迭代次数，防止物块从夹爪里滑出
