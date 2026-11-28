@@ -4,7 +4,7 @@
 
 | 手册章节 | 终端 | 原命令 | 新命令 |
 |----------|------|--------|--------|
-| §6 | 0 | `xhost + && airbot_server -i can0 -p 50051` | 不变（机械臂容器中执行） |
+| §6 | 0 | `xhost + && airbot_server -i can0 -p 50051` | `airbot_server -i can0 -p 50051` |
 | §6 | 1 | `roslaunch ./launch/real_control.launch use_grpc:=true` | `pixi run bringup` |
 | §6–§8 | 2 | `rosrun airbot_play_control_upper airbot_play_keyboard.py --init_pose configs/control/real.yaml` | `pixi run keyboard` |
 | §8.2 | 3 | `python3 demo/hsv_finder.py -na -d 2` | `pixi run hsv-finder -na -d 2` |
