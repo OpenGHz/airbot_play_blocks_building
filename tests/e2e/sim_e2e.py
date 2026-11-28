@@ -15,6 +15,10 @@ Scenarios
             held cube and aligns it, not the gripper, with the tower's top block.
   --place-stop PX (floor, held-cube): also run the program with `--place-stop PX`: the place
             stage stops only when the remaining move along the approach is below PX pixels.
+  --nudge (floor, open-place, held-cube): after each pickup, once the held cube is off the floor,
+            push it along the gap between the fingers by 2 .. 3 mm, either way (`sim-ctl cube nudge`):
+            an artificial grasp offset. The same sequence in every run (--nudge-seed).
+  --video (floor, open-place, held-cube): also record the run with sim-record (record.mp4).
   --scene (floor, open-place, held-cube, limit, golden): run the program with `--scene`, the
             planning scene instead of the default fixed waypoints. The transfers are then one
             trajectory each, so floor-like scenarios also require transfers without stops (the
@@ -465,6 +469,7 @@ def run(
     program: str = "new",
     vision: str = "camera",
     record: bool = False,
+    video: bool = False,
     out: pathlib.Path | None = None,
     policy=None,
     timeout: float = 900.0,
@@ -523,6 +528,23 @@ def run(
             stack.start("vision", [sys.executable, str(REPO / "tests/e2e/zero_target.py")])
         monitor = Monitor(out / "sim.sock", cfg, control)
         monitor.start()
+        if video:  # sim-record, from the start of the program
+            stack.start(
+                "record",
+                [
+                    sys.executable,
+                    "-m",
+                    "sim.record",
+                    "--scene",
+                    scene_name,
+                    "--control",
+                    f"configs/control/{env_type}.yaml",
+                    "--out",
+                    str(out / "record.mp4"),
+                ],
+            )
+            if not stack.wait_for("record", "写入", 30):
+                raise RuntimeError("sim-record did not start (record.log)")
         cwd = old_worktree() if program == "old" else REPO
         cmd = [sys.executable, "airbot_play_pick_place.py", "-cp", "2", "-r", *args]
         if record:
@@ -546,7 +568,7 @@ def run(
         if monitor is not None:
             monitor.stop_flag.set()
             monitor.join(5)
-        for proc in ("vision", "bringup"):
+        for proc in ("record", "vision", "bringup"):
             stack.stop(proc, signal.SIGINT, wait=20)
         stack.stop("sim", signal.SIGTERM, wait=15)
     log = stack.output("pick_place")
@@ -580,12 +602,56 @@ def run(
 # scenario policies: return True to end the run
 # --------------------------------------------------------------------------------------
 def stop_after(blocks: int):
+    """End the run once `blocks` blocks are on the tower. A failure prompt before that (the arm could
+    not do a move) is answered with Enter: the program goes Home and exits with fewer blocks."""
+
     def policy(stack, mon, st):
         if mon.tower_count >= blocks and not st["stopped"]:
             time.sleep(1.0)
             st["stopped"] = True
             return True
-        return False
+        return answer_enter(stack, mon, st)
+
+    return policy
+
+
+NUDGE_MM = (2.0, 3.0)
+
+
+def nudge_held(inner, seed: int = 0, mm=NUDGE_MM):
+    """Wrap a policy: after each pickup, once the held cube is 15 mm off where the gripper closed,
+    push it along the gap between the fingers (custom_end_link's z axis, horizontal) by a random
+    mm[0] .. mm[1] mm, either way, with `sim-ctl cube nudge`. Once per tower level; the same
+    sequence for the same seed. The pushes are listed in the report ("nudges")."""
+    rng = np.random.default_rng(seed)
+    done: set[int] = set()
+    grip = {"z": None, "k": None}  # where the gripper closed on a cube, and the tower level then
+    drv: dict = {}
+
+    def policy(stack, mon, st):
+        if mon.samples:
+            _, eef, width, _ = mon.samples[-1]
+            k = mon.tower_count
+            if not 0.015 < width < CLOSED_WIDTH:  # not holding a cube
+                grip["z"] = grip["k"] = None
+            elif k not in done:
+                if grip["z"] is None:
+                    grip["z"], grip["k"] = eef[2], k
+                elif grip["k"] == k and eef[2] > grip["z"] + 0.015:  # lifted (not: just released, still closed)
+                    gap = mon.frame.rot.T @ mon.d.xmat[mon.eef].reshape(3, 3)[:, 2]  # base frame
+                    u = gap[:2] / np.linalg.norm(gap[:2])
+                    d = rng.uniform(*mm) * rng.choice([-1.0, 1.0]) / 1000.0
+                    try:
+                        if "d" not in drv:
+                            drv["d"] = MujocoDriver(path=stack.out / "sim.sock", rate=1)
+                            drv["d"].connect(5.0)
+                        drv["d"].request("ctl", cmd="cube_nudge", args={"dx": d * u[0], "dy": d * u[1]})
+                        st.setdefault("nudges", []).append({"block": k + 1, "mm": round(d * 1000, 2)})
+                        mon.log(f"nudged the held cube {d * 1000:+.2f} mm along the finger gap (block {k + 1})")
+                    except DriverError as e:
+                        mon.log(f"nudge failed: {e}")
+                    done.add(k)
+        return inner(stack, mon, st)
 
     return policy
 
@@ -717,6 +783,10 @@ def summary(r: dict, tower: bool = True) -> str:
         )
     if r.get("fault_prompts"):
         lines.append(f"   failure prompts: {r['fault_prompts']}; {r.get('built_line')}")
+    if r.get("nudges"):
+        lines.append(
+            "   nudged the held cube (mm along the finger gap): " + ", ".join(f"{n['mm']:+.2f}" for n in r["nudges"])
+        )
     if r.get("killed_sim"):
         lines.append(
             f"   killed the simulation; prompt after {r.get('prompt_after_s')} s; "
@@ -763,6 +833,13 @@ def main() -> int:
         action="store_true",
         help="floor, open-place, held-cube, limit, golden: run the program with --scene (the planning scene)",
     )
+    ap.add_argument(
+        "--nudge",
+        action="store_true",
+        help=f"floor, open-place, held-cube: push each held cube {NUDGE_MM[0]:g} .. {NUDGE_MM[1]:g} mm along the finger gap",
+    )
+    ap.add_argument("--nudge-seed", type=int, default=0, help="seed of the --nudge sequence")
+    ap.add_argument("--video", action="store_true", help="floor, open-place, held-cube: record the run (record.mp4)")
     args = ap.parse_args()
     scene_args = ("--scene",) if args.scene else ()
     suffix = "-scene" if args.scene else ""
@@ -772,13 +849,17 @@ def main() -> int:
         if args.place_stop is not None and args.scenario != "open-place":
             extra, name = ("--place-stop", str(args.place_stop)), f"{args.scenario}-stop{args.place_stop:g}"
         vision_extra = ("--held-cube",) if args.scenario == "held-cube" else ()
+        policy = stop_after(args.blocks)
+        if args.nudge:
+            policy, suffix = nudge_held(policy, args.nudge_seed), suffix + "-nudge"
         r = run(
             name + suffix,
             "floor",
             "sim",
-            policy=stop_after(args.blocks),
+            policy=policy,
             args=extra + scene_args,
             vision_args=vision_extra,
+            video=args.video,
         )
         # exit 0 after the Ctrl+C that ends the run: it used to abort now and then (-6) when a MoveIt call
         # returned while Python shut down (the end of airbot_play_pick_place.py)

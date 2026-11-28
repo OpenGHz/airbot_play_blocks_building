@@ -593,7 +593,8 @@ class World:
         if cmd == "cube_nudge":
             dx, dy = float(args.get("dx", 0.0)), float(args.get("dy", 0.0))  # base frame
             p = self.gripper_point()
-            near = min(self.active(), key=lambda i: np.hypot(*(self.cube_pos(i)[:2] - p[:2])), default=None)
+            # nearest in 3D: over the tower, the block below is about as close horizontally as the held one
+            near = min(self.active(), key=lambda i: np.linalg.norm(self.cube_pos(i) - p), default=None)
             if near is None:
                 raise RuntimeError("场景里没有物块")
             pos = self.cube_pos(near).copy()
