@@ -1,0 +1,24 @@
+# MuJoCo 仿真场景："tabletop"，和真机配置 configs/control/real.yaml 的布局一致：
+# 抓取区和塔都在机械臂所在的桌面上（和底座同高），塔在抓取区左边（+y）。
+# 用来在仿真里复现真机的情况：搭到一定高度后竖直上升够不到（方案 §1.1，真机旧模型是第 7 块，DISCOVERSE 新模型是第 6 块），以及改动前后的比对。
+# 这里没写的键来自 base 指定的文件。长度单位 m，位置都在机械臂基座坐标系（桌面是 z = 0）。
+base: sim.yaml
+name: tabletop
+
+pick_surface: table
+mount: front
+base_front: 0.60        # 底座中心离桌子前沿 0.6 m，抓取区和塔都在底座前方的桌面上
+table_depth: 0.80
+table_width: 1.20
+tower_xy: [0.2734, 0.2145]  # real.yaml 的 place_position_x/y
+pick_xy: [0.2734, 0.0]      # real.yaml 的 pick_position_x/y
+
+# 和 sim_floor.yaml 一样：扫描位姿下相机只看得到夹爪前方，所以抓取区放在扫描点前方 4 cm
+pick_area:
+  center: [0.3134, 0.015]
+  half_size: [0.035, 0.075]
+  count: 4
+  margin: 0.008
+  yaw_deg: 15
+cube_pool: 40
+noslip_iterations: 5

@@ -1,14 +1,13 @@
-import rospy
-from sensor_msgs.msg import JointState
-from std_msgs.msg import Float64MultiArray
-import numpy as np
 from threading import Thread
 
+import numpy as np
+import rospy
 from robot_tools.datar import get_values_by_names
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64MultiArray
 
 
-class RosRobot(object):
-
+class RosRobot:
     def __init__(
         self,
         states_topic,
@@ -45,15 +44,9 @@ class RosRobot(object):
             "/observations/effort": np.random.rand(states_num),
             "/action": np.random.rand(states_num),
         }
-        self.states_suber = rospy.Subscriber(
-            states_topic, JointState, self.joint_states_callback
-        )
-        self.arm_cmd_pub = rospy.Publisher(
-            arm_action_topic, Float64MultiArray, queue_size=10
-        )
-        self.gripper_cmd_pub = rospy.Publisher(
-            gripper_action_topic, Float64MultiArray, queue_size=10
-        )
+        self.states_suber = rospy.Subscriber(states_topic, JointState, self.joint_states_callback)
+        self.arm_cmd_pub = rospy.Publisher(arm_action_topic, Float64MultiArray, queue_size=10)
+        self.gripper_cmd_pub = rospy.Publisher(gripper_action_topic, Float64MultiArray, queue_size=10)
         Thread(target=self.publish_action, daemon=True).start()
 
     def _eef_cmd_convert(self, cmd):
@@ -61,44 +54,24 @@ class RosRobot(object):
         return [value, -value]
 
     def joint_states_callback(self, data: JointState):
-        arm_joints_pos = get_values_by_names(
-            self.arm_joint_names, data.name, data.position
-        )
-        gripper_joints_pos = get_values_by_names(
-            self.gripper_joint_names, data.name, data.position
-        )
+        arm_joints_pos = get_values_by_names(self.arm_joint_names, data.name, data.position)
+        gripper_joints_pos = get_values_by_names(self.gripper_joint_names, data.name, data.position)
         gripper_joints_pos = [gripper_joints_pos[0] / self.symmetry]
-        self.body_current_data["/observations/qpos"] = list(arm_joints_pos) + list(
-            gripper_joints_pos
-        )
-        arm_joints_vel = get_values_by_names(
-            self.arm_joint_names, data.name, data.velocity
-        )
-        gripper_joints_vel = get_values_by_names(
-            self.gripper_joint_names, data.name, data.velocity
-        )
+        self.body_current_data["/observations/qpos"] = list(arm_joints_pos) + list(gripper_joints_pos)
+        arm_joints_vel = get_values_by_names(self.arm_joint_names, data.name, data.velocity)
+        gripper_joints_vel = get_values_by_names(self.gripper_joint_names, data.name, data.velocity)
         gripper_joints_vel = [gripper_joints_vel[0]]
-        self.body_current_data["/observations/qvel"] = list(arm_joints_vel) + list(
-            gripper_joints_vel
-        )
-        arm_joints_effort = get_values_by_names(
-            self.arm_joint_names, data.name, data.effort
-        )
-        gripper_joints_effort = get_values_by_names(
-            self.gripper_joint_names, data.name, data.effort
-        )
+        self.body_current_data["/observations/qvel"] = list(arm_joints_vel) + list(gripper_joints_vel)
+        arm_joints_effort = get_values_by_names(self.arm_joint_names, data.name, data.effort)
+        gripper_joints_effort = get_values_by_names(self.gripper_joint_names, data.name, data.effort)
         gripper_joints_effort = [gripper_joints_effort[0]]
-        self.body_current_data["/observations/effort"] = list(arm_joints_effort) + list(
-            gripper_joints_effort
-        )
+        self.body_current_data["/observations/effort"] = list(arm_joints_effort) + list(gripper_joints_effort)
 
     def publish_action(self):
         rate = rospy.Rate(200)
         while not rospy.is_shutdown():
             self.arm_cmd_pub.publish(Float64MultiArray(data=self.action_cmd["arm"]))
-            self.gripper_cmd_pub.publish(
-                Float64MultiArray(data=self.action_cmd["gripper"])
-            )
+            self.gripper_cmd_pub.publish(Float64MultiArray(data=self.action_cmd["gripper"]))
             rate.sleep()
 
     def get_current_joint_positions(self):
@@ -113,9 +86,7 @@ class RosRobot(object):
     def set_joint_position_target(self, qpos, qvel=None, blocking=False):  # TODO: add blocking
         self.action_cmd["arm"] = qpos[: self.arm_joints_num]
         if len(qpos) == self.all_joints_num:
-            self.action_cmd["gripper"] = self._eef_cmd_convert(
-                qpos[self.arm_joints_num]
-            )
+            self.action_cmd["gripper"] = self._eef_cmd_convert(qpos[self.arm_joints_num])
 
     def set_target_joint_q(self, qpos, qvel=None, blocking=False):
         self.set_joint_position_target(qpos, qvel, blocking)

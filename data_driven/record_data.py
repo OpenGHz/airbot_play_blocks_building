@@ -1,20 +1,18 @@
-import rospy
-from sensor_msgs.msg import JointState
-from std_msgs.msg import Float64
-import numpy as np
 import argparse
 
-from robot_tools.recorder import ImageRecorderRos
-from robot_tools.datar import get_values_by_names
-from robot_tools.performancer import Memorier
-from robot_tools.pather import get_current_dir
+import numpy as np
+import rospy
 
 # import sys
 # sys.path.insert(0, get_current_dir(__file__))
 # from data_driven.hdf5er import save_one_episode
 from hdf5er import save_one_episode
+from robot_tools.datar import get_values_by_names
+from robot_tools.pather import get_current_dir
+from robot_tools.recorder import ImageRecorderRos
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Float64
 from tqdm import tqdm
-
 
 parser = argparse.ArgumentParser("Record data from the environment")
 parser.add_argument("--camera_names", nargs="+", default=("0", "1"))
@@ -51,9 +49,7 @@ all_data = {
     "/action": np.random.rand(max_time_steps, states_num),
 }
 for name in camera_names:
-    all_data[f"/observations/images/{name}"] = [
-        np.random.randint(0, 255, image_shape, dtype="uint8")
-    ] * max_time_steps
+    all_data[f"/observations/images/{name}"] = [np.random.randint(0, 255, image_shape, dtype="uint8")] * max_time_steps
 
 # TODO: Load the current data defination from outside
 body_current_data = {
@@ -71,38 +67,25 @@ symmetry = 0.04
 
 def joint_states_callback(data: JointState):
     arm_joints_pos = get_values_by_names(arm_joint_names, data.name, data.position)
-    gripper_joints_pos = get_values_by_names(
-        gripper_joint_names, data.name, data.position
-    )
+    gripper_joints_pos = get_values_by_names(gripper_joint_names, data.name, data.position)
     gripper_joints_pos = [gripper_joints_pos[0] / symmetry]
-    body_current_data["/observations/qpos"] = list(arm_joints_pos) + list(
-        gripper_joints_pos
-    )
+    body_current_data["/observations/qpos"] = list(arm_joints_pos) + list(gripper_joints_pos)
     arm_joints_vel = get_values_by_names(arm_joint_names, data.name, data.velocity)
-    gripper_joints_vel = get_values_by_names(
-        gripper_joint_names, data.name, data.velocity
-    )
+    gripper_joints_vel = get_values_by_names(gripper_joint_names, data.name, data.velocity)
     gripper_joints_vel = [gripper_joints_vel[0]]
-    body_current_data["/observations/qvel"] = list(arm_joints_vel) + list(
-        gripper_joints_vel
-    )
+    body_current_data["/observations/qvel"] = list(arm_joints_vel) + list(gripper_joints_vel)
     arm_joints_effort = get_values_by_names(arm_joint_names, data.name, data.effort)
-    gripper_joints_effort = get_values_by_names(
-        gripper_joint_names, data.name, data.effort
-    )
+    gripper_joints_effort = get_values_by_names(gripper_joint_names, data.name, data.effort)
     gripper_joints_effort = [gripper_joints_effort[0]]
-    body_current_data["/observations/effort"] = list(arm_joints_effort) + list(
-        gripper_joints_effort
-    )
+    body_current_data["/observations/effort"] = list(arm_joints_effort) + list(gripper_joints_effort)
 
 
 current_action = {"arm": None, "gripper": None}
 
 
 def arm_action_callback(data: JointState):
-    current_action["arm"] = get_values_by_names(
-        arm_joint_names, data.name, data.position
-    )
+    current_action["arm"] = get_values_by_names(arm_joint_names, data.name, data.position)
+
 
 def gripper_action_callback(data: Float64):
     current_action["gripper"] = data.data
@@ -118,9 +101,7 @@ image_recorder = ImageRecorderRos(camera_names, topic_names=None, show_images=Tr
 
 states_suber = rospy.Subscriber(states_topic, JointState, joint_states_callback)
 arm_action_suber = rospy.Subscriber(arm_action_topic, JointState, arm_action_callback)
-gripper_action_suber = rospy.Subscriber(
-    gripper_action_topic, Float64, gripper_action_callback
-)
+gripper_action_suber = rospy.Subscriber(gripper_action_topic, Float64, gripper_action_callback)
 
 print("Waiting for the first arm and gripper message...")
 current_body_state: JointState = rospy.wait_for_message(states_topic, JointState)
@@ -145,9 +126,7 @@ for step in tqdm(range(max_time_steps)):
     all_data["/observations/qpos"][step] = body_current_data["/observations/qpos"]
     all_data["/observations/qvel"][step] = body_current_data["/observations/qvel"]
     all_data["/observations/effort"][step] = body_current_data["/observations/effort"]
-    all_data["/action"][step] = list(current_action["arm"]) + [
-        current_action["gripper"]
-    ]
+    all_data["/action"][step] = list(current_action["arm"]) + [current_action["gripper"]]
     rate.sleep()
 print(f"Start saving data to {output_dir}/{output_name}...")
 save_one_episode(all_data, camera_names, output_dir, output_name, overwrite=True)

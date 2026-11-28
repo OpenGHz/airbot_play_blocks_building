@@ -1,6 +1,7 @@
 [workspace]
 name = "airbot_play_blocks_building"
-description = "AIRBOT Play blocks-building demo on a real robot: ROS Noetic + MoveIt via RoboStack, no Docker needed on the host"
+version = "0.2.0"
+description = "AIRBOT Play blocks-building demo on a real robot or in a MuJoCo simulation: ROS Noetic + MoveIt via RoboStack, no Docker needed on the host"
 channels = ["robostack-noetic", "conda-forge"]
 platforms = ["linux-64"]
 license = "MIT"
@@ -46,6 +47,14 @@ pyserial = "*"
 # conda's OpenCV (Qt GUI + V4L2) also satisfies std-vision's opencv-python
 # requirement, so there is exactly one cv2 in the environment.
 py-opencv = "*"
+# --- simulation ---
+mujoco = ">=3.16.0,<4"
+# The panel next to the MuJoCo window (sim/panel.py); RViz brings PyQt5 in as well.
+# conda-forge's tk is built without Xft, so Chinese text would not render in a Tk window.
+pyqt = "5.*"
+# --- tests (pixi run test) and code style (pixi run lint / fmt) ---
+pytest = ">=9.2.0,<10"
+ruff = ">=0.17.6,<0.18"
 
 [pypi-dependencies]
 robotics-tools = "==1.0.2"
@@ -63,14 +72,36 @@ build = { cmd = "catkin build", cwd = "ros_ws", depends-on = ["configure"], desc
 clean = { cmd = "catkin clean -y", cwd = "ros_ws", description = "Remove ROS build artefacts" }
 doctor = { cmd = "bash scripts/doctor.sh", description = "Check the environment, the arm service and the cameras" }
 
-# Manual (实验手册) section 6, terminal 1: bridge to the arm service + MoveIt/RViz.
-bringup = { cmd = "bash scripts/check_arm.sh && roslaunch launch/real_control.launch use_grpc:=true url:=$ARM_URL port:=$ARM_PORT", description = "Connect to airbot_server and start MoveIt/RViz" }
-# Section 6-8, terminal 2: keyboard teleoperation.
-keyboard = { cmd = "rosrun easy_arm_control airbot_play_keyboard.py --init_pose configs/control/real.json", description = "Keyboard teleoperation" }
+# Manual (实验手册) section 6, terminal 1: bridge to the arm (airbot_server, or `pixi run sim`) + MoveIt/RViz.
+bringup = { cmd = "bash scripts/bringup.sh", description = "Find the arm (real or simulated), start the bridge node and MoveIt/RViz" }
+# Section 6-8, terminal 2: keyboard teleoperation (configs/control/<env_type>.yaml).
+keyboard = { cmd = "bash scripts/keyboard.sh", description = "Keyboard teleoperation" }
 # Section 8.2, terminal 3: e.g. `pixi run hsv-finder -na -d 2`.
-hsv-finder = { cmd = "python demo/hsv_finder.py", description = "Tune HSV thresholds with sliders" }
-# Sections 8.3 and 9, terminal 3: e.g. `pixi run vision -t pi0 -vd 2`, `pixi run vision -vd 2`.
-vision = { cmd = "python Best_Contour.py -cfg ./configs/vision/real.json", description = "Block detection" }
+hsv-finder = { cmd = "bash scripts/hsv_finder.sh", description = "Tune HSV thresholds with sliders" }
+# Sections 8.3 and 9, terminal 3: e.g. `pixi run vision -t pi0 -vd 2`, `pixi run vision -vd 2` (configs/vision/<env_type>.yaml).
+vision = { cmd = "bash scripts/vision.sh", description = "Block detection" }
 # Section 9, terminal 2: e.g. `pixi run pick-place adjust 0`, `pixi run pick-place go 20.25 40.51`.
 pick-place = { cmd = "bash run_pick_place.sh", description = "Pick-and-place control (adjust / go)" }
 record = { cmd = "python data_driven/record_data.py", description = "Record a demonstration episode" }
+
+# Tests (plan §8). `test`: unit tests and arm-driver contract tests, no ROS master needed (also run on GitHub Actions).
+# `test-e2e SCENARIO`: the whole stack in the simulation on a private ROS master (floor, open-place, held-cube, limit, baseline, kill-sim, golden; floor and held-cube take --place-stop PX, most take --scene).
+test = { cmd = "python -m pytest -q tests", description = "Unit tests and arm-driver contract tests (no ROS master needed)" }
+test-e2e = { cmd = "python tests/e2e/sim_e2e.py", description = "End-to-end run in the simulation: floor | open-place | held-cube | limit | baseline | kill-sim | golden" }
+
+# Code style (ruff.toml): `lint` checks only (also on GitHub Actions), `fmt` rewrites the files.
+lint = { cmd = "ruff format --check . && ruff check .", description = "Check the Python code style (ruff format + ruff check)" }
+fmt = { cmd = "ruff format . && ruff check --fix . && ruff format .", description = "Format the Python code and apply the safe lint fixes" }
+
+# MuJoCo simulation. Terminal 0 in the simulation: `pixi run sim` instead of airbot_server.
+sim = { cmd = "python -m sim.world", description = "Run the simulated arm, gripper and cubes (MuJoCo window and the panel; --headless, --no-camera, --no-panel, --seed N)" }
+sim-panel = { cmd = "python -m sim.panel", description = "Open the panel again: where the arm stands on the table and where the cubes are, with sliders and numbers" }
+sim-ctl = { cmd = "python -m sim.ctl", description = "The operator's hands in the simulation: sim-ctl cube to-gripper|put-under|nudge|set|take|respawn|reset|list, sim-ctl arm where|mount|save" }
+sim-slip-test = { cmd = "python -m sim.slip_test", description = "Check that a grasped cube does not slip out of the gripper" }
+sim-record = { cmd = "python -m sim.record", description = "Record the running simulation (whole arm + wrist camera inset) to runs/sim/record_*.mp4 until Ctrl+C (--snapshot PNG to choose the view)" }
+sim-calib-vision = { cmd = "python -m sim.calib_vision", description = "Compute expect_x / expect_pick_ref / expect_place_ref for configs/vision/sim.yaml (--apply)" }
+sim-vision-check = { cmd = "python -m sim.vision_check", description = "Run the block detection on rendered images: pick-area layouts and towers; fails if it merges cubes or locks onto the wrong one" }
+# Scene analysis: look at it, render it, pick the tower spot and table height.
+sim-view = { cmd = "python -m sim.view", description = "Open the MuJoCo viewer on the simulated scene (--scene floor|table, --pose pick|floor|top|home)" }
+sim-snapshot = { cmd = "python -m sim.snapshot", description = "Render the simulated scene to runs/sim/scene_<scene>.png (--scene floor|table)" }
+sim-reach = { cmd = "python -m sim.reach", description = "Find the tower (and floor pick area) spot and starting table height (--scene floor|table, --apply)" }

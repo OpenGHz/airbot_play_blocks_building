@@ -1,27 +1,16 @@
 #!/bin/bash
+# `pixi run pick-place ...`: airbot_play_pick_place.py. The real robot and the MuJoCo simulation run the
+# same code; only the config differs (configs/control/<env_type>.yaml, env_type set by bringup).
 
 # detect the rosmaster whether is running
 if rostopic list > /dev/null 2>&1; then
 	echo "rosmaster ok"
-else echo "Please start real or sim robot first (detect no rosmaster)！" && exit 0
+else echo "Please start the arm (airbot_server or pixi run sim) and pixi run bringup first (detect no rosmaster)！" && exit 0
 fi
-
-# auto choose sim or real
-sim_player_nums="$(rosparam get /airbot_play/sim_player_nums)"
-if [ -z "$sim_player_nums" ] || [ "$sim_player_nums" = "0" ];then
-	use_real='-r'
-	echo "*************Use Real Task*************"
-else echo "*************Use Sim Task*************"
-fi
-sleep 1
 
 # params set
 while [ "$1" != "" ]; do
-	if [ "$1" = 'gazebo' ];then
-		sim_type='-g'
-	elif [ "$1" == "gibson" ];then
-		sim_type='-gb'
-	elif [ "$1" == "adjust" ];then
+	if [ "$1" == "adjust" ];then
 		adjust="-cp"
 		adjust_param="$2"
 		shift
@@ -32,25 +21,15 @@ while [ "$1" != "" ]; do
 		rosparam set control_param2 "$3"
 		shift
 		shift
-	elif [ "$1" == "fixed" ];then
-		fixed='--fixed'
+	elif [ "$1" == "open-place" ];then
+		open_place='--open-place'
+	elif [ "$1" == "place-stop" ];then
+		place_stop="--place-stop=$2"
+		shift
+	elif [ "$1" == "scene" ];then
+		scene='--scene'
     fi
     shift
 done
 
-if [ -z "$use_real" ] && [ -z "$sim_type" ];then
-	sim_type='-g'
-fi
-
-# detect whether the sim is ready
-if [ -z "$use_real" ] && [ "$sim_type" = "-gb" ];then
-	while [ "$(rosparam list | (grep /cube_delta_z))" == "" ]
-	do
-		echo "Wait for the sim to be really ready."
-		sleep 2.5
-	done
-fi
-sleep 1
-
-# start follow script
-python3 airbot_play_pick_place.py "${adjust}" "${adjust_param}" "${go}" "${go_param}" "${use_real}" "${sim_type}" "${fixed}"
+python3 airbot_play_pick_place.py "${adjust}" "${adjust_param}" "${go}" "${go_param}" "${open_place}" "${place_stop}" "${scene}"

@@ -1,0 +1,34 @@
+# 视觉参数（真机），Best_Contour.py（pixi run vision）读取。
+# HSV 范围用 pixi run hsv-finder 确定；参考位置按手册 §8.3（vision -t pi0 / -t pl0）确定。
+# 颜色 1 是第 1、3、5…… 块，颜色 2 是第 2、4、6…… 块。
+
+# Pick 阶段（以及 use_place_hsv 为 false 时的 Place 阶段）的 HSV 下限 L、上限 H
+hsv1_l: [139, 57, 12]
+hsv1_h: [164, 255, 255]
+hsv2_l: [24, 83, 55]
+hsv2_h: [140, 240, 255]
+
+expect_pick_ref: 428.0   # Pick：夹爪正下方物块的中心在图像中的 y（像素）
+expect_place_ref: 364.5  # Place：对正时塔顶物块图像上边沿在图像中的 y（像素；实际是物块的下边沿）
+expect_x: AUTO           # 两个阶段的期望 x（像素）；AUTO 为图像宽度的一半
+
+# 可选：手里的物块，pixi run vision --held-cube 时才用，真机上还没有标定。
+# expect_held_ref：在调节位姿上把物块摆在夹爪正中，pixi run vision -t pl0（或 pl1）打印的
+# "手里物块：… 图像上边沿 …"。held_scale：手里物块和塔顶物块各沿两指空隙方向平移同样的距离，
+# 塔顶物块和手里物块在图像 y 上移动的像素之比；下面是仿真里的值，只作参考。
+# expect_held_ref: 415.0
+# held_scale: 0.86
+
+# Place 阶段单独的 HSV 范围，use_place_hsv 为 true 时才用
+use_place_hsv: false
+hsv1_l_p: [89, 74, 48]
+hsv1_h_p: [157, 255, 255]
+hsv2_l_p: [66, 78, 81]
+hsv2_h_p: [88, 255, 255]
+
+# 轮廓面积范围（像素²），范围外的轮廓不参与选择
+area_limit_pick: [2000, 80000]
+area_limit_place: [500, 20000]
+
+# 可选：Place 阶段只保留的图像列 [x0, x1]（像素），不写时保留整幅宽度
+# place_crop_x: [270, 370]

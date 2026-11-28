@@ -4,9 +4,9 @@
 
 | 手册章节 | 终端 | 原命令 | 新命令 |
 |----------|------|--------|--------|
-| §6 | 0 | `xhost + && airbot_server -i can0 -p 50051` | 不变（机械臂容器中执行） |
+| §6 | 0 | `xhost + && airbot_server -i can0 -p 50051` | `airbot_server -i can0 -p 50051` |
 | §6 | 1 | `roslaunch ./launch/real_control.launch use_grpc:=true` | `pixi run bringup` |
-| §6–§8 | 2 | `rosrun airbot_play_control_upper airbot_play_keyboard.py --init_pose configs/control/real.json` | `pixi run keyboard` |
+| §6–§8 | 2 | `rosrun airbot_play_control_upper airbot_play_keyboard.py --init_pose configs/control/real.yaml` | `pixi run keyboard` |
 | §8.2 | 3 | `python3 demo/hsv_finder.py -na -d 2` | `pixi run hsv-finder -na -d 2` |
 | §8.3.1 | 3 | `python3 Best_Contour.py -t pi0 -vd 2` | `pixi run vision -t pi0 -vd 2` |
 | §8.3.2 | 3 | `python3 Best_Contour.py -t pl0 -vd 2` | `pixi run vision -t pl0 -vd 2` |
@@ -21,7 +21,7 @@
 说明：
 
 - 包名 `airbot_play_control_upper` 已改为 `easy_arm_control`。直接用 `rosrun` 时写作 `rosrun easy_arm_control airbot_play_keyboard.py ...`。
-- `pixi run vision` 固定读取 `configs/vision/real.json`。原命令在真机下读取的也是这个文件。
+- `pixi run vision` 固定读取 `configs/vision/real.yaml`。原命令在真机下读取的也是这个文件。
 - 习惯直接输入原命令的，先执行 `pixi shell`，之后原命令（`roslaunch`、`rosrun`、`rosparam`、`python3 ...`）都可以照常使用。
 
 ## 手册第 5 节（终端准备）新版文本

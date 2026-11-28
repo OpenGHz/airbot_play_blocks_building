@@ -1,0 +1,31 @@
+# 视觉参数（MuJoCo 仿真），Best_Contour.py（pixi run vision）读取。
+# expect_* 由 pixi run sim-calib-vision --apply 算出并写入。
+# 颜色 1 是第 1、3、5…… 块（绿），颜色 2 是第 2、4、6…… 块（蓝）。
+
+# Pick 阶段的 HSV 下限 L、上限 H。亮度下限较高，只取顶面，相邻物块的侧面不会连成一片
+hsv1_l: [50, 80, 140]
+hsv1_h: [70, 255, 255]
+hsv2_l: [110, 80, 145]
+hsv2_h: [130, 255, 255]
+
+expect_pick_ref: 429.0   # Pick：夹爪正下方物块的中心在图像中的 y（像素）
+expect_place_ref: 382.0  # Place：对正时塔顶物块图像上边沿在图像中的 y（像素；实际是物块的下边沿）
+expect_x: 319.5          # 两个阶段的期望 x（像素）；AUTO 为图像宽度的一半
+
+# 手里的物块，pixi run vision --held-cube 时用（Place 阶段按手里物块沿两指空隙方向的偏差移动对准目标）
+expect_held_ref: 408.0   # 物块在夹爪正中时，它的图像上边沿 y（像素；图像里最上面的那条边，实际是物块挨着塔顶的下边沿）
+held_scale: 0.88         # 沿两指空隙方向同样的位移，塔顶物块和手里物块在图像 y 上移动的像素之比
+
+# Place 阶段单独的 HSV 范围（亮度下限低：塔顶物块离相机近、处在夹爪的阴影里）
+use_place_hsv: true
+hsv1_l_p: [50, 80, 30]
+hsv1_h_p: [70, 255, 255]
+hsv2_l_p: [110, 80, 30]
+hsv2_h_p: [130, 255, 255]
+
+# 轮廓面积范围（像素²），范围外的轮廓不参与选择
+area_limit_pick: [1000, 10000]
+area_limit_place: [300, 20000]
+
+# Place 阶段只保留的图像列 [x0, x1]（像素），看不到旁边抓取区的物块
+place_crop_x: [270, 370]

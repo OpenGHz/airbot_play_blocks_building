@@ -1,0 +1,45 @@
+# MuJoCo 仿真场景：抓取区在桌面上（"table"）。sim/scene.py 读取。
+# 长度单位 m，位置都在机械臂基座坐标系（x 向前，y 向左，z 向上；桌面是 z = 0）。
+name: table
+
+table_height: 0.495               # 桌面离地高度；pixi run sim-reach --apply 写入
+table_height_range: [0.40, 1.20]  # sim-reach 搜索的桌高范围
+# 机械臂立在它的底板上，底板（URDF 里 base_link 的碰撞盒 base_plate，275 × 161 mm，来自 DISCOVERSE，转了 90°：长边左右、短边前后）整块放在桌面上。机械臂的碰撞体在第 3 组（sim/scene.py 的 COLLISION_GROUP），默认不画。
+mount: front                      # 机械臂装在桌子的长边（front，底板前沿和桌沿齐平）或短边（side，底板左边和桌沿齐平）
+table_depth: 0.60
+table_width: 1.20
+# base_front: 0.60                # 可选，长边安装时底座中心到桌沿的距离；不写时底板前沿和桌沿齐平（底座中心离桌沿 0.0806 m）
+side_mount_back: 0.20             # 短边安装时底座离桌角的距离
+table_thickness: 0.025
+column_size: [0.12, 0.08]         # 升降桌立柱的截面
+column_inset: 0.12                # 立柱离桌子短边的距离
+foot_size: [0.60, 0.07, 0.04]     # 升降桌底脚
+
+joint_limit_margin_deg: 2.0       # sim-reach 检查时关节角离限位至少这么多
+
+tower_xy: [0.15, -0.2598]         # 塔的位置
+
+cube_size: 0.025
+cube_mass: 0.012
+cube_colors:
+  green: [0.21, 0.70, 0.21, 1.0]
+  blue: [0.21, 0.21, 0.70, 1.0]
+pick_xy: [-0.0647, -0.2415]       # 抓取区中心
+pick_cubes:                       # 抓取区的物块：相对 pick_xy 的 [dx, dy, 颜色]
+  - [-0.03, -0.05, green]
+  - [-0.03, 0.00, blue]
+  - [-0.03, 0.05, green]
+  - [0.03, -0.05, blue]
+  - [0.03, 0.00, green]
+  - [0.03, 0.05, blue]
+
+# 腕部相机。来源：DISCOVERSE@957ef6c models/mjcf/airbot_play/airbot_play_cam.xml（c7e24ef "support mujoco" 用的 MuJoCo 配置）
+# 这里只定镜头的位置、朝向和画面；相机本体是模型里 link6 上的 camera_stand 网格（外观和碰撞都用它）。
+camera:
+  parent: link6
+  pos: [-0.11, 0.0, -0.11]
+  euler: [3.1416, 0.0, 1.5708]
+  fovy: 85.53
+  width: 640
+  height: 480
+  fps: 30
