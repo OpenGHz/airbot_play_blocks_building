@@ -30,7 +30,9 @@ transit_z_min: -0.425
 # 的 pick_area）因此放在扫描点 (0.25, 0) 前方，中心是 (0.29, 0.015)，矩形的中心也设在那里
 pick_area_center: [0.29, 0.015]
 pick_area_half_size: [0.065, 0.105]
-place_track_half_size: [0.02, 0.02]  # Place 阶段矩形的半边长，以 place_position_x/y 为中心
+# 和真机一样不设 Place 阶段的范围：它以 place_position_x/y 为中心，第 1 块却放在它前方 1 cm，
+# 塔沿 +x 歪到约 1 cm 就会出界停下（docs/place_comparison.md §2.4）
+# place_track_half_size: [0.02, 0.02]  # Place 阶段矩形的半边长，以 place_position_x/y 为中心（不写时 Place 阶段不限位）
 
 # 以下是可选项，不写时用括号里的缺省值
 # gap_place: 0.003        # 调节时手里物块的底面比塔顶高出的距离（0.003）

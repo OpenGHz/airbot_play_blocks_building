@@ -2,12 +2,14 @@
 as one side-by-side video. Used for docs/place_comparison.md.
 
   python tests/e2e/compare_runs.py towers --out towers.png LABEL=RUN_DIR [LABEL=RUN_DIR ...]
+      (RUN_DIR@T anywhere below: the state at T s into the run instead of the last one, e.g. just
+      before the tower fell.)
       One column per run: the tower at the end of the run, seen along the base frame's y axis
       (x, the gap between the fingers at the place pose, to the right), along its x axis (y to the
       left) and in perspective. Orthographic side views at a fixed scale (--px-per-mm), a dashed
       line through the bottom block's centre; the top block's offset from the bottom one below.
-      Rendered from the last simulation state the run saved (samples.npz), with the arm moved
-      Home and every cube that is not in the tower taken away.
+      Rendered from the last simulation state the run saved (samples.npz), or the one at T, with the
+      arm moved Home and every cube that is not in the tower taken away.
   python tests/e2e/compare_runs.py table LABEL=RUN_DIR [...]
       Markdown table: per run, each block's offset from the bottom one (x, y, mm) and the top's.
   python tests/e2e/compare_runs.py chart --out offsets.png "PANEL|LABEL=RUN_DIR" [...]
@@ -38,26 +40,34 @@ from sim import scene  # noqa: E402
 TOWER_RADIUS = 0.04  # cubes within this of the tower spot (horizontally) are in the tower
 
 
-def parse_runs(items: list[str]) -> list[tuple[str, pathlib.Path]]:
+def run_spec(spec: str) -> tuple[pathlib.Path, float | None]:
+    """RUN_DIR or RUN_DIR@T (seconds into the run)."""
+    path, _, at = spec.partition("@")
+    return pathlib.Path(path), float(at) if at else None
+
+
+def parse_runs(items: list[str]) -> list[tuple[str, pathlib.Path, float | None]]:
     out = []
     for it in items:
-        label, _, path = it.partition("=")
-        if not path:
+        label, _, spec = it.partition("=")
+        if not spec:
             raise SystemExit(f"{it!r}: expected LABEL=RUN_DIR")
-        out.append((label, pathlib.Path(path)))
+        out.append((label, *run_spec(spec)))
     return out
 
 
 class FinalState:
-    """The simulation at the end of a run, in a fresh model of its scene."""
+    """The simulation at the end of a run (or `at` seconds into it), in a fresh model of its scene."""
 
-    def __init__(self, run: pathlib.Path):
+    def __init__(self, run: pathlib.Path, at: float | None = None):
         self.report = json.loads((run / "report.json").read_text())
         self.cfg = scene.load_config(self.report["scene"])
         self.m, self.d, _ = scene.build_physics(self.cfg)
         m = self.m
         m.vis.global_.offwidth, m.vis.global_.offheight = 2000, 2000
-        qpos = np.load(run / "samples.npz")["qpos"][-1]
+        samples = np.load(run / "samples.npz")
+        k = -1 if at is None else int(np.searchsorted(samples["t"], at, side="right")) - 1
+        qpos = samples["qpos"][k]
         self.d.qpos[:] = qpos
         self.frame = scene.base_frame(self.cfg)
         self.s = self.cfg["cube_size"] / 2
@@ -131,21 +141,26 @@ def text_bar(width: int, lines: list[str], scale=0.5, height=None) -> np.ndarray
 
 def towers(args) -> None:
     cols = []
-    for label, run in parse_runs(args.runs):
-        st = FinalState(run)
+    for label, run, at in parse_runs(args.runs):
+        st = FinalState(run, at)
         off = st.offsets_mm()
         views = [st.render(v, args.px_per_mm, args.width_mm, args.height_mm) for v in ("along_y", "along_x")]
         w = views[0].shape[1]
         persp = st.render("persp", args.px_per_mm, args.width_mm, args.width_mm * 1.1)
         top = off[-1] if len(off) else (0.0, 0.0)
         steps = np.linalg.norm(np.diff(off, axis=0), axis=1) if len(off) > 1 else np.zeros(1)
-        disturbed = len(st.report.get("tower_disturbed") or [])
+        events = st.report.get("tower_disturbed") or []
+        disturbed = len([e for e in events if at is None or e[0] <= at])
         info = [
-            f"{len(off)} blocks" + (f", {disturbed} disturbed" if disturbed else ""),
+            f"{len(off)} blocks"
+            + (f", {disturbed} disturbed" if disturbed else "")
+            + (f" (at {at:.1f} s)" if at else ""),
             "top - bottom (mm):",
             f"  x {top[0]:+.1f}   y {top[1]:+.1f}",
             f"largest step {steps.max():.1f} mm",
         ]
+        if any(at is not None and e[0] > at for e in events):
+            info.append("then the tower fell")
         sep = np.full((4, w, 3), 255, np.uint8)
         col = np.vstack([text_bar(w, [label], 0.55, 30), views[0], sep, views[1], sep, persp, text_bar(w, info, 0.45)])
         cols.append(col)
@@ -161,7 +176,7 @@ def towers(args) -> None:
 
 
 def table(args) -> None:
-    runs = [(label, FinalState(run)) for label, run in parse_runs(args.runs)]
+    runs = [(label, FinalState(run, at)) for label, run, at in parse_runs(args.runs)]
     n = max(len(st.tower) for _, st in runs)
     print("| 块 | " + " | ".join(label for label, _ in runs) + " |")
     print("|---|" + "---|" * len(runs))
@@ -188,9 +203,9 @@ def chart(args) -> None:
 
     panels: dict[str, list] = {}
     for item in args.runs:
-        head, _, path = item.partition("=")
+        head, _, spec = item.partition("=")
         panel, _, label = head.partition("|")
-        panels.setdefault(panel, []).append((label, FinalState(pathlib.Path(path)).offsets_mm()))
+        panels.setdefault(panel, []).append((label, FinalState(*run_spec(spec)).offsets_mm()))
     labels = list(dict.fromkeys(label for runs in panels.values() for label, _ in runs))
     fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 3.8), sharex=True, sharey=True, dpi=150)
     axes = np.atleast_1d(axes)
@@ -221,7 +236,7 @@ def chart(args) -> None:
 
 
 def video(args) -> None:
-    (la, ra), (lb, rb) = parse_runs(args.runs)
+    (la, ra, _), (lb, rb, _) = parse_runs(args.runs)
     caps = [cv2.VideoCapture(str(r / "record.mp4")) for r in (ra, rb)]
     fps_in = caps[0].get(cv2.CAP_PROP_FPS) or 15.0
     step = max(1, round(args.speed * fps_in / args.fps))
