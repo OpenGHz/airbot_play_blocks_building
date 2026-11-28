@@ -1,6 +1,7 @@
 [workspace]
 name = "airbot_play_blocks_building"
-description = "AIRBOT Play blocks-building demo on a real robot: ROS Noetic + MoveIt via RoboStack, no Docker needed on the host"
+version = "0.2.0"
+description = "AIRBOT Play blocks-building demo on a real robot or in a MuJoCo simulation: ROS Noetic + MoveIt via RoboStack, no Docker needed on the host"
 channels = ["robostack-noetic", "conda-forge"]
 platforms = ["linux-64"]
 license = "MIT"
